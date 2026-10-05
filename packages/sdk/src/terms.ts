@@ -13,24 +13,25 @@ export type Terms = {
     /** Who may pull. `null` is anyone, which is only valid if the authority receives something. */
     spender: Address | null;
     notBefore: number;
-    /** `null` runs until closed. A signed intent must expire. */
+    /** `null` runs until closed or cancelled. */
     notAfter: number | null;
     /** Tells apart otherwise identical terms. For a signed intent it is also the nonce. */
     salt: string;
-    limits: Limit[];
+    limit: Limit;
     receive: Receive | null;
 };
 
 /**
- * At most `max` of `mint` may leave `from`, a token account of the authority:
- * in total, in every fixed window of N seconds counted from `notBefore`, or
- * in one pull. Limits on one account stack: a pull must fit every one of them.
+ * What may go out: at most `max` of `mint` may leave `from`, a token account
+ * of the authority, in total or in every fixed window of N seconds counted
+ * from `notBefore`. For an intent, which runs once, it is the most that one
+ * use may take.
  */
 export type Limit = {
     from: Address;
     mint: Address;
     max: string;
-    per: 'total' | 'use' | { every: number };
+    per: 'total' | { every: number };
 };
 
 /**
@@ -101,7 +102,7 @@ export function subscriptionTerms(p: {
 }): Terms {
     return {
         authority: p.subscriber,
-        limits: [{ from: p.account, max: p.amount.toString(), mint: p.mint, per: { every: p.period } }],
+        limit: { from: p.account, max: p.amount.toString(), mint: p.mint, per: { every: p.period } },
         notAfter: p.end ?? null,
         notBefore: p.start,
         receive: null,

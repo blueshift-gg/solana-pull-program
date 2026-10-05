@@ -70,8 +70,7 @@ let lastBlockhash = '';
 
 /** Settle: pull `amount` from the payer to `to` under the budget Alice put on chain. The program decides. */
 async function settle(executor: Party, budget: Budget, to: Address, amount: bigint) {
-    const from = decode(budget.terms).limits[0].from;
-    const instructions = [await getPullInstruction({ amount, from, spender: executor.signer, terms: budget.terms, to })];
+    const instructions = [await getPullInstruction({ amount, spender: executor.signer, terms: budget.terms, to })];
     // Each settlement must be a new transaction: wait for a fresh blockhash
     let { value: blockhash } = await rpc.getLatestBlockhash().send();
     while (blockhash.blockhash === lastBlockhash) {

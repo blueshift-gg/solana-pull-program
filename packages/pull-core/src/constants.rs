@@ -15,8 +15,6 @@ pub const CLUSTER: u8 = if cfg!(feature = "localnet") {
     0
 };
 
-/// Limits in one policy.
-pub const MAX_LIMITS: usize = 8;
 /// 9999-12-31T23:59:59Z: the last instant the canonical text can render.
 pub const MAX_TIME: i64 = 253_402_300_799;
 
@@ -33,13 +31,11 @@ pub const ENGINE_BUMP: u8 = 255;
 /// seed so nobody can pre-create another authority's policy.
 pub const POLICY_SEED: &[u8] = b"policy";
 
-/// Used nonces of signed intents: [NONCES_SEED, authority, day, page], both
-/// little-endian. `day` is the intent's expiry in whole days: every intent in
-/// a page is dead once that day is over, so the page can then be closed.
-/// `page` is the intent's salt divided by `NONCE_BITS`, and its bit in the
-/// page is the remainder: every salt has its own bit.
+/// The used nonces of an authority's signed intents: [NONCES_SEED, authority,
+/// page], `page` little-endian. An intent's nonce is its salt: the page is
+/// `salt / NONCE_BITS` and the bit is the remainder. Pages stay forever, so a
+/// used or cancelled nonce stays used, whenever the intent expires or not.
 pub const NONCES_SEED: &[u8] = b"nonces";
-pub const NONCE_DAY: i64 = 86_400;
 /// Nonces in one page.
 pub const NONCE_BITS: usize = 1024;
 
@@ -50,7 +46,6 @@ pub const NONCES_TAG: u8 = 2;
 /// Self-CPI event instruction discriminator.
 pub const EVENT_DISCRIMINATOR: u8 = 255;
 
-pub const LEDGER_LEN: usize = 8 + MAX_LIMITS * 8; // 72
 /// Fixed header; the canonical terms follow it.
-pub const POLICY_LEN: usize = 1 + LEDGER_LEN + 32 + 2; // 107
-pub const NONCES_LEN: usize = 1 + 2 * 32 + 2 * 8 + NONCE_BITS / 8; // 209
+pub const POLICY_LEN: usize = 1 + 8 + 8 + 32 + 2; // 51
+pub const NONCES_LEN: usize = 1 + 32 + 8 + NONCE_BITS / 8; // 169

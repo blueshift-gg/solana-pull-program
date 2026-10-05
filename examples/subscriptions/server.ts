@@ -91,9 +91,9 @@ export function fathom(): Plugin {
         const { signer } = await ready;
         const plan = PLANS.find((p) => p.id === member.plan);
         const t = decode(member.terms);
-        const [limit] = t.limits;
+        const { limit } = t;
         const period = typeof limit.per === 'object' ? limit.per.every : 0;
-        if (!plan || t.authority !== member.address || t.limits.length !== 1 || t.receive) return 'This approval is not for a Fathom plan';
+        if (!plan || t.authority !== member.address || t.receive) return 'This approval is not for a Fathom plan';
         if (limit.mint !== USDC || BigInt(limit.max) !== plan.price || period !== plan.period) return 'This approval does not match the plan';
         if (t.spender !== signer.address) return 'This approval does not name Fathom as its spender';
         return null;
@@ -103,8 +103,7 @@ export function fathom(): Plugin {
     async function charge(member: Member) {
         const { signer, usdc } = await ready;
         const plan = PLANS.find((p) => p.id === member.plan)!;
-        const from = decode(member.terms).limits[0].from;
-        const instructions = [await getPullInstruction({ amount: plan.price, from, spender: signer, terms: member.terms, to: usdc })];
+        const instructions = [await getPullInstruction({ amount: plan.price, spender: signer, terms: member.terms, to: usdc })];
         const { value: blockhash } = await rpc.getLatestBlockhash().send();
         const tx = await signTransactionMessageWithSigners(
             pipe(

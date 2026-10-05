@@ -39,44 +39,13 @@ macro_rules! account {
     };
 }
 
-/// What each limit of a policy has consumed.
-#[repr(C)]
-pub struct Ledger {
-    /// When `consumed` was last written.
-    rolled: [u8; 8],
-    consumed: [[u8; 8]; MAX_LIMITS],
-}
-
-impl Ledger {
-    field!(rolled, set_rolled, i64);
-
-    pub fn set_consumed(&mut self, k: usize, v: u64) {
-        self.consumed[k] = v.to_le_bytes();
-    }
-
-    /// What limit `k` has consumed at `now`. A periodic limit starts each
-    /// window, counted from `start`, with nothing consumed.
-    pub fn spent(&self, k: usize, per: Per, start: i64, now: i64) -> u64 {
-        let consumed = u64::from_le_bytes(self.consumed[k]);
-        match per {
-            Per::Total => consumed,
-            Per::Every(seconds) => {
-                let window = |t: i64| (t - start).div_euclid(seconds as i64);
-                match window(now) == window(self.rolled()) {
-                    true => consumed,
-                    false => 0,
-                }
-            }
-            Per::Use => 0,
-        }
-    }
-}
-
 /// A policy: this header, then the canonical terms.
 #[repr(C)]
 pub struct Policy {
     tag: [u8; 1],
-    pub ledger: Ledger,
+    /// When `consumed` was last written.
+    rolled: [u8; 8],
+    consumed: [u8; 8],
     /// Paid the rent; refunded by `Close`.
     pub payer: Pubkey,
     terms_len: [u8; 2],
@@ -86,20 +55,34 @@ account!(Policy);
 
 impl Policy {
     field!(tag, set_tag, u8);
+    field!(rolled, set_rolled, i64);
+    field!(consumed, set_consumed, u64);
     field!(terms_len, set_terms_len, u16);
+
+    /// What the limit has consumed at `now`. A periodic limit starts each
+    /// window, counted from `start`, with nothing consumed.
+    pub fn spent(&self, per: Per, start: i64, now: i64) -> u64 {
+        match per {
+            Per::Total => self.consumed(),
+            Per::Every(seconds) => {
+                let window = |t: i64| (t - start).div_euclid(seconds as i64);
+                match window(now) == window(self.rolled()) {
+                    true => self.consumed(),
+                    false => 0,
+                }
+            }
+        }
+    }
 }
 
-/// One page of the nonces an authority's signed intents have used, for
-/// intents that expire on one day. One bit each, so intents run in any order.
+/// One page of the nonces an authority's signed intents have used or
+/// cancelled: one bit each, so intents run in any order. It is never closed.
 #[repr(C)]
 pub struct Nonces {
     tag: [u8; 1],
-    /// Paid the rent; refunded by `Close` once the day is over.
-    pub payer: Pubkey,
     /// The page's place, recorded when it was created at its PDA, so a fill
     /// compares these instead of deriving the address again.
     pub authority: Pubkey,
-    day: [u8; 8],
     page: [u8; 8],
     bits: [u8; NONCE_BITS / 8],
 }
@@ -108,7 +91,6 @@ account!(Nonces);
 
 impl Nonces {
     field!(tag, set_tag, u8);
-    field!(day, set_day, i64);
     field!(page, set_page, u64);
 
     /// Mark the nonce of `salt` used; false if it already was.
@@ -119,10 +101,14 @@ impl Nonces {
         *byte |= mask;
         fresh
     }
+
+    /// Mark every nonce of the page used.
+    pub fn take_all(&mut self) {
+        self.bits = [u8::MAX; NONCE_BITS / 8];
+    }
 }
 
 const _: () = {
-    assert!(core::mem::size_of::<Ledger>() == LEDGER_LEN);
     assert!(core::mem::size_of::<Policy>() == POLICY_LEN);
     assert!(core::mem::size_of::<Nonces>() == NONCES_LEN);
 };

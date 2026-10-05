@@ -227,10 +227,19 @@ pub fn terms<'a>(
     authority: &'a [u8; 32],
     spender: Option<&'a [u8; 32]>,
     not_after: Option<i64>,
-    limits: &[Limit<'a>],
+    limit: Limit<'a>,
     receive: Option<Receive<'a>>,
 ) -> Terms<'a> {
-    Terms::new(authority, spender, (NOW, not_after), 0, limits, receive)
+    Terms {
+        cluster: CLUSTER,
+        authority,
+        spender,
+        not_before: NOW,
+        not_after,
+        salt: 0,
+        limit,
+        receive,
+    }
 }
 
 pub fn policy_pda(authority: &Address, bytes: &[u8]) -> Address {
@@ -299,11 +308,10 @@ pub fn pull(
     }
 }
 
-/// The page that holds the nonce of an intent of `authority` with this expiry and salt.
-pub fn nonces_pda(authority: &Address, not_after: i64, salt: u64) -> Address {
-    let day = not_after.div_euclid(NONCE_DAY).to_le_bytes();
+/// The page that holds the nonce of an intent of `authority` with this salt.
+pub fn nonces_pda(authority: &Address, salt: u64) -> Address {
     let page = (salt / NONCE_BITS as u64).to_le_bytes();
-    pda(&[NONCES_SEED, authority.as_ref(), &day, &page])
+    pda(&[NONCES_SEED, authority.as_ref(), &page])
 }
 
 /// `spender` runs a signed intent once, taking `amount`. It pays for the page of nonces.
@@ -319,10 +327,7 @@ pub fn fill(
     let mut accounts = vec![
         AccountMeta::new_readonly(*spender, true),
         AccountMeta::new(*spender, true),
-        AccountMeta::new(
-            nonces_pda(&authority, terms.not_after.unwrap(), terms.salt),
-            false,
-        ),
+        AccountMeta::new(nonces_pda(&authority, terms.salt), false),
         AccountMeta::new_readonly(SYSTEM, false),
     ];
     accounts.extend(legs(take, payment, TOKEN));
@@ -333,23 +338,23 @@ pub fn fill(
     }
 }
 
-/// The authority uses up an intent's nonce, so it can never be filled.
-pub fn cancel(authority: &Address, not_after: i64, salt: u64) -> Instruction {
+/// The authority uses up an intent's nonce, or with `page` every nonce of its page.
+pub fn cancel(authority: &Address, salt: u64, page: bool) -> Instruction {
     Instruction {
         program_id: PROGRAM,
         accounts: vec![
             AccountMeta::new_readonly(*authority, true),
             AccountMeta::new(*authority, true),
-            AccountMeta::new(nonces_pda(authority, not_after, salt), false),
+            AccountMeta::new(nonces_pda(authority, salt), false),
             AccountMeta::new_readonly(SYSTEM, false),
             AccountMeta::new_readonly(ENGINE_KEY, false),
             AccountMeta::new_readonly(PROGRAM, false),
         ],
-        data: [&[11][..], &not_after.to_le_bytes(), &salt.to_le_bytes()].concat(),
+        data: [&[11][..], &salt.to_le_bytes(), &[page as u8]].concat(),
     }
 }
 
-/// Close a policy or a page of nonces; its rent goes to `payer`, the account that paid it.
+/// Close a policy; its rent goes to `payer`, the account that paid it.
 pub fn close(closer: &Address, account: &Address, payer: &Address) -> Instruction {
     Instruction {
         program_id: PROGRAM,

@@ -54,7 +54,7 @@ export function Screen() {
         if (s.alice) setAlice((await usdcOf(s.alice))?.amount ?? 0n);
         if (s.budget) {
             const policy = await fetchPolicy(rpc, unb64(s.budget.terms), s.clock);
-            setToday(policy?.spent[0] ?? 0n);
+            setToday(policy?.spent ?? 0n);
         }
     }), []);
 

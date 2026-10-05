@@ -70,14 +70,15 @@ to this text, and verifies Ed25519 over it in-program. The text is all a wallet 
 show, and a byte of the terms cannot change without changing it
 (`every_byte_of_the_terms_is_visible_in_the_text`).
 
-An intent runs once, and the only thing it leaves on chain is one bit: its nonce. The
-salt is the nonce. Nonces live in pages of 1,024, one bit for every salt, grouped by
-owner and by day of expiry, so intents run in any order and none runs twice. A wallet
-hands out salts in sequence (`nextSalt`), which keeps an owner's intents in one page.
+An intent runs once. The only thing it leaves on chain is one bit, its nonce, and that
+bit stays set forever. The salt is the nonce: an owner's nonces live in pages of 1,024,
+one bit for every salt, so intents run in any order and none ever runs twice. A wallet
+hands out salts in sequence (`nextSalt`), which fills one page before the next.
 
-An intent must expire. The expiry can be far out, which makes an intent a replacement
-for a durable nonce when the action is a token movement: sign now, and the spender lands
-it any time before the date, with nothing set up first.
+`Cancel` sets the bit of an intent that has not run, or of every intent in its page at
+once. An intent may expire, but does not have to: with no expiry it is a replacement for
+a durable nonce when the action is a token movement. Sign now, and the spender lands it
+whenever it is due, with nothing set up first.
 
 ## Instructions
 
@@ -85,20 +86,21 @@ it any time before the date, with nothing set up first.
 |---|---|---|---|
 | 0 | `Create` | the owner | put a policy on chain |
 | 1 | `Pull` | the spender | take tokens under a policy, and deliver what the owner must receive |
-| 2 | `Close` | see below | close an account and return its rent |
+| 2 | `Close` | the owner or the spender; anyone after the expiry | close a policy and return its rent |
 | 10 | `Fill` | the spender | run a signed intent, once |
-| 11 | `Cancel` | the owner | use up an intent's nonce, so it can never run |
+| 11 | `Cancel` | the owner | use up an intent's nonce, or a whole page of them |
 
-Two account types, each recording who paid its rent. Whoever pays is always a separate
-account from whoever signs.
+Two account types. Whoever pays the rent is always a separate account from whoever
+signs.
 
 | Account | Holds | Closes |
 |---|---|---|
-| Policy | the terms, and what each limit has consumed | the owner or the spender, at any time; anyone after its expiry |
-| Nonces | 1,024 used-nonce bits, for intents of one owner that expire on one day | anyone, once that day is over |
+| Policy | the terms, what each limit has consumed, and who paid the rent | the owner or the spender, at any time; anyone after its expiry |
+| Nonces | 1,024 used-nonce bits of one owner | never: a used nonce stays used |
 
 A policy is created only by a transaction, so closing it is final and the rent returns
-at once. A page of nonces closes when every intent it guards has expired.
+at once. A page of nonces costs about 0.002 SOL once, paid by whoever runs or cancels the
+first intent in it.
 
 ## Cost
 

@@ -28,8 +28,6 @@ pub enum PullError {
     InvalidAuthority,
     /// The signature does not cover the rendered terms
     InvalidSignature,
-    /// A signed intent must expire, and name one source account
-    InvalidIntent,
     /// The intent's nonce was used: it ran already, or was cancelled
     NonceUsed,
     /// A timestamp outside years 1970–9999 cannot be rendered
@@ -41,15 +39,14 @@ pub enum PullError {
     Expired,
     /// The signer is not the terms' spender
     InvalidSpender,
-    /// Only the authority or the spender may close a policy before it expires,
-    /// and nobody may close a page of nonces before its day is over
+    /// Only the authority or the spender may close a policy before it expires
     NotClosable,
     /// The account is not the one that paid the rent being refunded
     InvalidPayer,
 
-    /// No limit of the policy covers the account pulled from
+    /// The account pulled from is not the one the terms limit
     InvalidPull,
-    /// The pull exceeds a limit
+    /// The pull exceeds the limit
     LimitExceeded,
     /// A token account or mint is not the one the terms name, or not the authority's
     InvalidTarget,
@@ -64,7 +61,7 @@ pub enum PullError {
 impl PullError {
     /// Every error in code order, so clients can name a code: `ALL[code]`.
     /// A new variant goes here too; the test below checks the order.
-    pub const ALL: [PullError; 26] = [
+    pub const ALL: [PullError; 25] = [
         PullError::NotSigner,
         PullError::NotMutable,
         PullError::InvalidAccountOwner,
@@ -77,7 +74,6 @@ impl PullError {
         PullError::WrongCluster,
         PullError::InvalidAuthority,
         PullError::InvalidSignature,
-        PullError::InvalidIntent,
         PullError::NonceUsed,
         PullError::Unrenderable,
         PullError::NotYetValid,

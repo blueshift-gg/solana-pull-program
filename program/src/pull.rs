@@ -5,7 +5,7 @@ use pinocchio::log::sol_log;
 use pinocchio::sysvars::{clock::Clock, Sysvar};
 use pinocchio::{account_info::AccountInfo, program_error::ProgramError, ProgramResult};
 use pull_core::errors::PullError;
-use pull_core::terms::Terms;
+use pull_core::terms::{Limit, Terms};
 
 /// The accounts a pull moves tokens between, shared by `Pull` and `Fill`.
 pub struct Legs<'a> {
@@ -29,6 +29,17 @@ impl Legs<'_> {
         }
         if terms.spender.is_some_and(|s| s.ne(self.spender.key())) {
             return Err(PullError::InvalidSpender.into());
+        }
+        Ok(())
+    }
+
+    /// The source and its mint are the ones the terms limit.
+    pub fn check_source(&self, limit: &Limit) -> ProgramResult {
+        if limit.from.ne(self.from.key()) {
+            return Err(PullError::InvalidPull.into());
+        }
+        if limit.mint.ne(self.mint.key()) {
+            return Err(PullError::InvalidTarget.into());
         }
         Ok(())
     }
@@ -62,12 +73,12 @@ impl Legs<'_> {
 
 /// # Pull
 ///
-/// Take tokens under a policy, within every limit on the account. If the
+/// Take tokens under a policy, within its limit. If the
 /// policy says what the authority receives, the spender pays it here, in the
 /// same instruction: there is nothing in between to trust. Callable by CPI.
 ///
 /// > Check the window and the spender
-/// > Check the amount against every limit on the source, and record it
+/// > Check the amount against what is left of the limit, and record it
 /// > Transfer from the source, as the engine delegate
 /// > Receive: transfer the payment from the spender, and check what arrived
 ///
@@ -161,27 +172,16 @@ impl<'a> Pull<'a> {
         let terms = Terms::decode(bytes)?;
         legs.check(&terms, now)?;
 
-        // The amount must fit every limit on the source. Each limit's count is
-        // written back as of now, so one timestamp serves all of them
-        let mut covered = false;
-        for (k, limit) in terms.limits().iter().enumerate() {
-            let mut spent = policy.ledger.spent(k, limit.per, terms.not_before, now);
-            if limit.from.eq(legs.from.key()) {
-                if limit.mint.ne(legs.mint.key()) {
-                    return Err(PullError::InvalidTarget.into());
-                }
-                spent = spent.checked_add(amount).ok_or(PullError::Overflow)?;
-                if spent > limit.max {
-                    return Err(PullError::LimitExceeded.into());
-                }
-                covered = true;
-            }
-            policy.ledger.set_consumed(k, spent);
+        // The amount must fit what is left of the limit
+        let limit = terms.limit;
+        legs.check_source(&limit)?;
+        let spent = policy.spent(limit.per, terms.not_before, now);
+        let spent = spent.checked_add(amount).ok_or(PullError::Overflow)?;
+        if spent > limit.max {
+            return Err(PullError::LimitExceeded.into());
         }
-        if !covered {
-            return Err(PullError::InvalidPull.into());
-        }
-        policy.ledger.set_rolled(now);
+        policy.set_consumed(spent);
+        policy.set_rolled(now);
 
         let paid = legs.settle(&terms, amount, now)?;
 

@@ -5,7 +5,6 @@ use pull_core::errors::PullError;
 use pull_core::terms::{Decay, Per, Receive};
 use pull_tests::*;
 use solana_address::Address;
-use solana_instruction::Instruction;
 use solana_signer::Signer;
 
 const DAY: i64 = 86_400;
@@ -30,8 +29,8 @@ fn subscription_is_one_instruction_and_resets_each_period() {
     let user_usdc = user.usdc.to_bytes();
 
     // The merchant may take at most 10 USDC every 30 days, until revoked
-    let limits = [limit(&user_usdc, &usdc, 10 * USDC, MONTHLY)];
-    let bytes = encode(&terms(&u, Some(&m), None, &limits, None));
+    let limits = limit(&user_usdc, &usdc, 10 * USDC, MONTHLY);
+    let bytes = encode(&terms(&u, Some(&m), None, limits, None));
     let create = create(&user.address(), &user.address(), &bytes);
     f.send(&[create], &[&user.key]).unwrap();
 
@@ -82,8 +81,8 @@ fn a_program_collects_a_subscription_by_cpi() {
     );
     let user_usdc = user.usdc.to_bytes();
 
-    let limits = [limit(&user_usdc, &usdc, 10 * USDC, MONTHLY)];
-    let bytes = encode(&terms(&u, Some(&m), None, &limits, None));
+    let limits = limit(&user_usdc, &usdc, 10 * USDC, MONTHLY);
+    let bytes = encode(&terms(&u, Some(&m), None, limits, None));
     let create = create(&user.address(), &user.address(), &bytes);
     f.send(&[create], &[&user.key]).unwrap();
 
@@ -118,50 +117,23 @@ fn a_signed_intent_runs_once_and_costs_its_signer_nothing() {
         f.usdc.to_bytes(),
     );
     let user_usdc = user.usdc.to_bytes();
-    let limits = [limit(&user_usdc, &usdc, 10 * USDC, Per::Total)];
+    let limits = limit(&user_usdc, &usdc, 10 * USDC, Per::Total);
     let (owner, spender) = (user.address(), payee.address());
     let take = (user.usdc, f.usdc, payee.usdc);
 
-    // An intent must expire
-    let forever = terms(&u, Some(&p), None, &limits, None);
-    let signature = sign(&forever, &user.key, f.decimals());
-    let ix = Instruction {
-        accounts: fill(
-            &spender,
-            &terms(&u, Some(&p), Some(NOW + 1), &limits, None),
-            &signature,
-            take,
-            USDC,
-            None,
-        )
-        .accounts,
-        data: [
-            &[10][..],
-            &USDC.to_le_bytes(),
-            &signature,
-            &encode(&forever),
-        ]
-        .concat(),
-        program_id: PROGRAM,
-    };
-    assert!(refused(
-        f.send(&[ix], &[&payee.key]),
-        PullError::InvalidIntent
-    ));
-
-    // Signed off chain, good for a week: the payee may take up to 10 USDC, once.
-    // This is what a durable nonce is used for, with nothing set up in advance
-    let expiry = NOW + 7 * DAY;
-    let mut week = terms(&u, Some(&p), Some(expiry), &limits, None);
-    let signature = sign(&week, &user.key, f.decimals());
+    // Signed off chain: the payee may take up to 10 USDC, once, with no
+    // expiry. This is what a durable nonce is used for, with nothing set up first
+    let mut intent = terms(&u, Some(&p), None, limits, None);
+    let signature = sign(&intent, &user.key, f.decimals());
     let before = f.svm.get_balance(&owner).unwrap();
 
     // Nobody else can run it, and not for more than it says
+    let elsewhere = (user.usdc, f.usdc, stranger.usdc);
     let theft = fill(
         &stranger.address(),
-        &week,
+        &intent,
         &signature,
-        (user.usdc, f.usdc, stranger.usdc),
+        elsewhere,
         USDC,
         None,
     );
@@ -169,47 +141,41 @@ fn a_signed_intent_runs_once_and_costs_its_signer_nothing() {
         f.send(&[theft], &[&stranger.key]),
         PullError::InvalidSpender
     ));
-    let ix = fill(&spender, &week, &signature, take, 10 * USDC + 1, None);
+    let ix = fill(&spender, &intent, &signature, take, 10 * USDC + 1, None);
     assert!(refused(
         f.send(&[ix], &[&payee.key]),
         PullError::LimitExceeded
     ));
 
-    // Five days later the payee lands it, taking 6. That was its one use
-    f.set_time(NOW + 5 * DAY);
-    let ix = fill(&spender, &week, &signature, take, 6 * USDC, None);
+    // A year later the payee lands it, taking 6. That was its one use, for good
+    f.set_time(NOW + 365 * DAY);
+    let ix = fill(&spender, &intent, &signature, take, 6 * USDC, None);
     f.send(std::slice::from_ref(&ix), &[&payee.key]).unwrap();
     assert!(refused(f.send(&[ix], &[&payee.key]), PullError::NonceUsed));
     assert_eq!(f.balance(&payee.usdc), 6 * USDC);
     assert_eq!(f.svm.get_balance(&owner).unwrap(), before);
 
-    // Another intent, same terms but its own salt, is cancelled before anyone runs it
-    week.salt = 1;
-    let signature = sign(&week, &user.key, f.decimals());
-    f.send(&[cancel(&owner, expiry, 1)], &[&user.key]).unwrap();
-    let ix = fill(&spender, &week, &signature, take, USDC, None);
-    assert!(refused(f.send(&[ix], &[&payee.key]), PullError::NonceUsed));
-
     // Every salt has its own bit: salt 1024 is bit 0 of the next page, and runs
-    week.salt = NONCE_BITS as u64;
-    let signature = sign(&week, &user.key, f.decimals());
-    let ix = fill(&spender, &week, &signature, take, USDC, None);
+    intent.salt = NONCE_BITS as u64;
+    let signature = sign(&intent, &user.key, f.decimals());
+    let ix = fill(&spender, &intent, &signature, take, USDC, None);
     f.send(&[ix], &[&payee.key]).unwrap();
 
-    // Once the day of the expiry is over, every intent in the page is dead and
-    // anyone returns its rent to the payee, who paid for it
-    let page = nonces_pda(&owner, expiry, 0);
-    let reclaim = close(&stranger.address(), &page, &spender);
-    f.set_time(expiry);
-    assert!(refused(
-        f.send(std::slice::from_ref(&reclaim), &[&stranger.key]),
-        PullError::NotClosable
-    ));
-    let funded = f.svm.get_balance(&spender).unwrap();
-    f.set_time(expiry + DAY);
-    f.send(&[reclaim], &[&stranger.key]).unwrap();
-    assert!(f.svm.get_account(&page).is_none_or(|a| a.lamports == 0));
-    assert!(f.svm.get_balance(&spender).unwrap() > funded);
+    // The owner cancels one intent before anyone runs it
+    intent.salt = 1;
+    let signature = sign(&intent, &user.key, f.decimals());
+    f.send(&[cancel(&owner, 1, false)], &[&user.key]).unwrap();
+    let ix = fill(&spender, &intent, &signature, take, USDC, None);
+    assert!(refused(f.send(&[ix], &[&payee.key]), PullError::NonceUsed));
+
+    // Or a whole page at once: every intent signed with a salt in 2048..3072
+    f.send(&[cancel(&owner, 2048, true)], &[&user.key]).unwrap();
+    for salt in [2048, 2500, 3071] {
+        intent.salt = salt;
+        let signature = sign(&intent, &user.key, f.decimals());
+        let ix = fill(&spender, &intent, &signature, take, USDC, None);
+        assert!(refused(f.send(&[ix], &[&payee.key]), PullError::NonceUsed));
+    }
 }
 
 #[test]
@@ -227,10 +193,10 @@ fn closing_a_policy_returns_the_rent_at_once() {
 
     // The user signs the transaction; a sponsor pays the fee and the rent.
     // One policy never expires, the other does: both close the same way
-    let limits = [limit(&user_usdc, &usdc, USDC, MONTHLY)];
+    let limits = limit(&user_usdc, &usdc, USDC, MONTHLY);
     let mut policies = Vec::new();
     for not_after in [None, Some(NOW + 365 * DAY)] {
-        let bytes = encode(&terms(&u, Some(&m), not_after, &limits, None));
+        let bytes = encode(&terms(&u, Some(&m), not_after, limits, None));
         let create = create(&owner, &payer, &bytes);
         f.send(&[create], &[&sponsor, &user.key]).unwrap();
         policies.push(policy_pda(&owner, &bytes));
@@ -258,59 +224,6 @@ fn closing_a_policy_returns_the_rent_at_once() {
 }
 
 #[test]
-fn limits_stack_on_one_account() {
-    let mut f = Fixture::new();
-    let user = f.wallet(100 * USDC, 0);
-    let agent = f.wallet(0, 0);
-    let (u, a, usdc) = (
-        user.address().to_bytes(),
-        agent.address().to_bytes(),
-        f.usdc.to_bytes(),
-    );
-    let user_usdc = user.usdc.to_bytes();
-
-    // An agent may spend at most 5 USDC per use, 12 a day and 20 in all
-    let limits = [
-        limit(&user_usdc, &usdc, 5 * USDC, Per::Use),
-        limit(&user_usdc, &usdc, 12 * USDC, Per::Every(DAY as u32)),
-        limit(&user_usdc, &usdc, 20 * USDC, Per::Total),
-    ];
-    let bytes = encode(&terms(&u, Some(&a), None, &limits, None));
-    let create = create(&user.address(), &user.address(), &bytes);
-    f.send(&[create], &[&user.key]).unwrap();
-
-    let spend = |f: &mut Fixture, amount: u64| {
-        let accounts = (user.usdc, f.usdc, agent.usdc);
-        let ix = pull(
-            &agent.address(),
-            &user.address(),
-            &bytes,
-            accounts,
-            amount,
-            None,
-            TOKEN,
-        );
-        f.send(&[ix], &[&agent.key])
-    };
-    assert!(refused(
-        spend(&mut f, 5 * USDC + 1),
-        PullError::LimitExceeded
-    ));
-    spend(&mut f, 5 * USDC).unwrap();
-    spend(&mut f, 5 * USDC).unwrap();
-    assert!(refused(
-        spend(&mut f, 2 * USDC + 1),
-        PullError::LimitExceeded
-    ));
-    spend(&mut f, 2 * USDC).unwrap();
-    f.set_time(NOW + DAY);
-    spend(&mut f, 5 * USDC).unwrap();
-    spend(&mut f, 3 * USDC).unwrap();
-    assert!(refused(spend(&mut f, 1), PullError::LimitExceeded));
-    assert_eq!(f.balance(&agent.usdc), 20 * USDC);
-}
-
-#[test]
 fn anyone_fills_a_signed_order_for_what_the_owner_must_receive() {
     let mut f = Fixture::new();
     let user = f.wallet(100 * USDC, 0);
@@ -324,7 +237,7 @@ fn anyone_fills_a_signed_order_for_what_the_owner_must_receive() {
 
     // Out: at most 100 USDC, to anyone. In: at least 0.52 SOL, falling to
     // 0.50 over five minutes
-    let limits = [limit(&user_usdc, &usdc, 100 * USDC, Per::Total)];
+    let limits = limit(&user_usdc, &usdc, 100 * USDC, Per::Total);
     let receive = Receive {
         to: &user_sol,
         mint: &sol,
@@ -335,7 +248,7 @@ fn anyone_fills_a_signed_order_for_what_the_owner_must_receive() {
             min: 500_000_000,
         }),
     };
-    let order = terms(&u, None, Some(NOW + 600), &limits, Some(receive));
+    let order = terms(&u, None, Some(NOW + 600), limits, Some(receive));
     let signature = sign(&order, &user.key, f.decimals());
 
     // Halfway down, a solver fills it for 0.51 SOL in one instruction: the
@@ -371,14 +284,14 @@ fn dca_runs_once_a_day_for_anyone_who_delivers() {
     let owner = user.address();
 
     // Out: at most 10 USDC every day, to anyone. In: at least 0.05 SOL each time
-    let limits = [limit(&user_usdc, &usdc, 10 * USDC, Per::Every(DAY as u32))];
+    let limits = limit(&user_usdc, &usdc, 10 * USDC, Per::Every(DAY as u32));
     let receive = Receive {
         to: &user_sol,
         mint: &sol,
         min: 50_000_000,
         decay: None,
     };
-    let bytes = encode(&terms(&u, None, None, &limits, Some(receive)));
+    let bytes = encode(&terms(&u, None, None, limits, Some(receive)));
     f.send(&[create(&owner, &owner, &bytes)], &[&user.key])
         .unwrap();
 
@@ -412,8 +325,8 @@ fn a_policy_reaches_only_its_authoritys_accounts() {
     let victim_usdc = victim.usdc.to_bytes();
 
     // The engine is the victim's delegate too, but this policy is the thief's
-    let limits = [limit(&victim_usdc, &usdc, 100 * USDC, Per::Total)];
-    let bytes = encode(&terms(&t, Some(&t), None, &limits, None));
+    let limits = limit(&victim_usdc, &usdc, 100 * USDC, Per::Total);
+    let bytes = encode(&terms(&t, Some(&t), None, limits, None));
     let key = thief.address();
     f.send(&[create(&key, &key, &bytes)], &[&thief.key])
         .unwrap();
@@ -481,8 +394,8 @@ fn a_fee_token_never_shorts_the_authority() {
     let spender = merchant.address();
 
     // Taking the fee token: the user gives up exactly the limit, the merchant gets it less the fee
-    let limits = [limit(&user_fee_key, &fee, 10 * USDC, MONTHLY)];
-    let bytes = encode(&terms(&u, Some(&m), None, &limits, None));
+    let limits = limit(&user_fee_key, &fee, 10 * USDC, MONTHLY);
+    let bytes = encode(&terms(&u, Some(&m), None, limits, None));
     f.send(&[create(&owner, &owner, &bytes)], &[&user.key])
         .unwrap();
     let accounts = (user_fee, mint, merchant_fee);
@@ -500,14 +413,14 @@ fn a_fee_token_never_shorts_the_authority() {
     assert_eq!(held(&f, &merchant_fee), 110 * USDC - USDC / 10);
 
     // Receiving the fee token: what arrives is short, so the pull is refused
-    let limits = [limit(&user_usdc, &usdc, 10 * USDC, Per::Total)];
+    let limits = limit(&user_usdc, &usdc, 10 * USDC, Per::Total);
     let receive = Receive {
         to: &user_fee_key,
         mint: &fee,
         min: 10 * USDC,
         decay: None,
     };
-    let bytes = encode(&terms(&u, None, None, &limits, Some(receive)));
+    let bytes = encode(&terms(&u, None, None, limits, Some(receive)));
     f.send(&[create(&owner, &owner, &bytes)], &[&user.key])
         .unwrap();
     let take = (user.usdc, f.usdc, merchant.usdc);
@@ -524,9 +437,9 @@ fn a_fee_token_never_shorts_the_authority() {
     assert_eq!(f.balance(&user.usdc), 100 * USDC);
 }
 
-/// A reference model of the limits, run against the program on random
+/// A reference model of the limit, run against the program on random
 /// policies, pulls and waits: the program accepts exactly what the model
-/// accepts, so no sequence of pulls gets past any limit.
+/// accepts, so no sequence of pulls gets past the limit.
 #[test]
 fn random_pulls_never_pass_a_limit() {
     let mut seed = 0x9E37_79B9_7F4A_7C15u64;
@@ -550,46 +463,36 @@ fn random_pulls_never_pass_a_limit() {
     let (mut accepted_count, mut refused_count) = (0, 0);
 
     for salt in 0..150 {
-        // One to three stacked limits; the first one always persists
-        let count = 1 + random(3) as usize;
-        let limits: Vec<_> = (0..count)
-            .map(|k| {
-                let per = match if k == 0 { random(2) } else { random(3) } {
-                    0 => Per::Total,
-                    1 => Per::Every(1 + random(1_000) as u32),
-                    _ => Per::Use,
-                };
-                limit(&user_usdc, &usdc, 1 + random(1_000), per)
-            })
-            .collect();
-        let mut terms = terms(&u, Some(&m), None, &limits, None);
+        // One limit: a lifetime total, or a window of random length
+        let per = match random(2) {
+            0 => Per::Total,
+            _ => Per::Every(1 + random(1_000) as u32),
+        };
+        let limits = limit(&user_usdc, &usdc, 1 + random(1_000), per);
+        let mut terms = terms(&u, Some(&m), None, limits, None);
         terms.salt = salt;
         let bytes = encode(&terms);
         let create = create(&user.address(), &user.address(), &bytes);
         f.send(&[create], &[&user.key]).unwrap();
 
-        let (mut consumed, mut rolled) = (vec![0u64; count], 0i64);
+        let (mut consumed, mut rolled) = (0u64, 0i64);
         for _ in 0..25 {
             now += random(600) as i64;
             f.set_time(now);
             let amount = random(1_200);
 
-            // The model: what each limit has spent now, and whether this pull fits all of them
-            let spent: Vec<u64> = (limits.iter().zip(&consumed))
-                .map(|(l, consumed)| match l.per {
-                    Per::Total => *consumed,
-                    Per::Every(seconds) => {
-                        let window = |t: i64| (t - NOW).div_euclid(seconds as i64);
-                        if window(now) == window(rolled) {
-                            *consumed
-                        } else {
-                            0
-                        }
+            // The model: what the limit has spent now, and whether this pull fits
+            let spent = match limits.per {
+                Per::Total => consumed,
+                Per::Every(seconds) => {
+                    let window = |t: i64| (t - NOW).div_euclid(seconds as i64);
+                    match window(now) == window(rolled) {
+                        true => consumed,
+                        false => 0,
                     }
-                    Per::Use => 0,
-                })
-                .collect();
-            let fits = limits.iter().zip(&spent).all(|(l, s)| s + amount <= l.max);
+                }
+            };
+            let fits = spent + amount <= limits.max;
 
             let accounts = (user.usdc, f.usdc, merchant.usdc);
             let spender = merchant.address();
@@ -607,7 +510,7 @@ fn random_pulls_never_pass_a_limit() {
 
             if accepted {
                 paid += amount;
-                consumed = spent.iter().map(|s| s + amount).collect();
+                consumed = spent + amount;
                 rolled = now;
                 accepted_count += 1;
             } else {

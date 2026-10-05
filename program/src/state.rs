@@ -43,35 +43,32 @@ pub fn nonces(account: &AccountInfo) -> Result<&mut Nonces, ProgramError> {
     Ok(unsafe { Nonces::from_bytes_unchecked_mut(bytes(account, NONCES_LEN, NONCES_TAG)?) })
 }
 
-/// The page that holds the nonce of an intent of `authority` with this expiry
-/// and salt, created with rent from `payer` if the intent is its first.
+/// The page that holds the nonce of an intent of `authority` with this salt,
+/// created with rent from `payer` if the intent is its first.
 #[allow(clippy::mut_from_ref)]
 pub fn nonces_for<'a>(
     payer: &AccountInfo,
     account: &'a AccountInfo,
     authority: &[u8; 32],
-    not_after: i64,
     salt: u64,
 ) -> Result<&'a mut Nonces, ProgramError> {
-    let (day, index) = (not_after.div_euclid(NONCE_DAY), salt / NONCE_BITS as u64);
+    let index = salt / NONCE_BITS as u64;
     if account.is_owned_by(&crate::ID) {
         // The page recorded its place when it was created at its PDA
         let page = nonces(account)?;
-        if page.authority.ne(authority) || page.day() != day || page.page() != index {
+        if page.authority.ne(authority) || page.page() != index {
             return Err(PullError::InvalidSeeds.into());
         }
         return Ok(page);
     }
-    let (day_bytes, index_bytes) = (day.to_le_bytes(), index.to_le_bytes());
-    let seeds: [&[u8]; 4] = [NONCES_SEED, authority, &day_bytes, &index_bytes];
+    let index_bytes = index.to_le_bytes();
+    let seeds: [&[u8]; 3] = [NONCES_SEED, authority, &index_bytes];
     let bump = check_pda(account, &seeds)?;
     create_pda(payer, account, NONCES_LEN, &seeds, bump)?;
     // SAFETY: the account was just created with `NONCES_LEN` zeroed bytes.
     let page = unsafe { Nonces::from_bytes_unchecked_mut(account.borrow_mut_data_unchecked()) };
     page.set_tag(NONCES_TAG);
-    page.payer = *payer.key();
     page.authority = *authority;
-    page.set_day(day);
     page.set_page(index);
     Ok(page)
 }

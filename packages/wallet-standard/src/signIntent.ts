@@ -10,8 +10,8 @@ export const SolanaSignIntent = 'solana:signIntent';
  * program enforces on chain.
  *
  * The dapp sends the canonical terms, never text. The wallet decodes and validates them, reads each
- * mint's decimals from its own RPC, renders the canonical text itself and shows it. It refuses terms
- * with no expiry (`until revoked`): a signed intent must expire.
+ * mint's decimals from its own RPC, renders the canonical text itself and shows it. For terms with
+ * no expiry (`until revoked`) it asks for a separate, explicit confirmation.
  * It then signs that text as an Offchain Message v1, so the output is exactly what
  * `solana:signOffchainMessage` would return for the same text, and what the program verifies.
  */

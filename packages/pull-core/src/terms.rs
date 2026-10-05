@@ -9,21 +9,17 @@ use pinocchio::pubkey::Pubkey;
 
 type Result<T> = core::result::Result<T, PullError>;
 
-const ZERO: Pubkey = [0; 32];
-
-/// What a limit counts over.
+/// What the limit counts over.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Per {
-    /// The life of the policy.
+    /// The life of a policy; the one use of an intent.
     Total,
     /// Fixed windows of `seconds`, counted from `not_before`. Nothing carries over.
     Every(u32),
-    /// One pull.
-    Use,
 }
 
-/// "At most `max` of `mint` may leave `from`", a token account of the
-/// authority. Limits on one account stack: a pull must fit every one of them.
+/// What may go out: "at most `max` of `mint` may leave `from`", a token
+/// account of the authority.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Limit<'a> {
     pub from: &'a Pubkey,
@@ -40,8 +36,9 @@ pub struct Decay {
     pub min: u64,
 }
 
-/// "Each use, at least `min` of `mint` arrives in `to`", a token account of
-/// the authority. The spender pays it inside the pull, whatever it takes.
+/// What must come in: "each use, at least `min` of `mint` arrives in `to`", a
+/// token account of the authority. The spender pays it inside the pull,
+/// whatever it takes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Receive<'a> {
     pub to: &'a Pubkey,
@@ -50,7 +47,7 @@ pub struct Receive<'a> {
     pub decay: Option<Decay>,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Terms<'a> {
     pub cluster: u8,
     pub authority: &'a Pubkey,
@@ -58,10 +55,9 @@ pub struct Terms<'a> {
     pub spender: Option<&'a Pubkey>,
     pub not_before: i64,
     pub not_after: Option<i64>,
-    /// Tells apart policies whose terms are otherwise identical.
+    /// Tells apart otherwise identical terms. For an intent it is the nonce.
     pub salt: u64,
-    limits: [Limit<'a>; MAX_LIMITS],
-    count: u8,
+    pub limit: Limit<'a>,
     pub receive: Option<Receive<'a>>,
 }
 
@@ -80,89 +76,43 @@ impl Receive<'_> {
 }
 
 impl<'a> Terms<'a> {
-    /// Terms from their parts, unchecked: `validate` or encode-then-decode them.
-    pub fn new(
-        authority: &'a Pubkey,
-        spender: Option<&'a Pubkey>,
-        window: (i64, Option<i64>),
-        salt: u64,
-        limits: &[Limit<'a>],
-        receive: Option<Receive<'a>>,
-    ) -> Self {
-        let empty = Limit {
-            from: &ZERO,
-            mint: &ZERO,
-            max: 0,
-            per: Per::Total,
-        };
-        let count = limits.len().min(MAX_LIMITS);
-        let mut list = [empty; MAX_LIMITS];
-        list[..count].copy_from_slice(&limits[..count]);
-        Terms {
-            cluster: CLUSTER,
-            authority,
-            spender,
-            not_before: window.0,
-            not_after: window.1,
-            salt,
-            limits: list,
-            // One past the maximum survives, so `validate` rejects it
-            count: limits.len().min(MAX_LIMITS + 1) as u8,
-            receive,
-        }
-    }
-
-    pub fn limits(&self) -> &[Limit<'a>] {
-        &self.limits[..(self.count as usize).min(MAX_LIMITS)]
-    }
-
     pub fn decode(bytes: &'a [u8]) -> Result<Self> {
         let mut r = Reader(bytes);
         if r.u8()? != VERSION {
             return Err(PullError::MalformedTerms);
         }
-        let cluster = r.u8()?;
-        let authority = r.key()?;
-        let spender = r.option(|r| r.key())?;
-        let window = (r.i64()?, r.option(|r| r.i64())?);
-        let salt = r.u64()?;
-
-        let count = r.u8()? as usize;
-        if count > MAX_LIMITS {
-            return Err(PullError::InvalidTerms);
-        }
-        let mut terms = Terms::new(authority, spender, window, salt, &[], None);
-        for limit in &mut terms.limits[..count] {
-            let (from, mint, max) = (r.key()?, r.key()?, r.u64()?);
-            let per = match (r.u8()?, r.u32()?) {
-                (0, 0) => Per::Total,
-                (1, seconds) => Per::Every(seconds),
-                (2, 0) => Per::Use,
-                _ => return Err(PullError::MalformedTerms),
-            };
-            *limit = Limit {
-                from,
-                mint,
-                max,
-                per,
-            };
-        }
-        terms.cluster = cluster;
-        terms.count = count as u8;
-        terms.receive = r.option(|r| {
-            Ok(Receive {
-                to: r.key()?,
+        let terms = Terms {
+            cluster: r.u8()?,
+            authority: r.key()?,
+            spender: r.option(|r| r.key())?,
+            not_before: r.i64()?,
+            not_after: r.option(|r| r.i64())?,
+            salt: r.u64()?,
+            limit: Limit {
+                from: r.key()?,
                 mint: r.key()?,
-                min: r.u64()?,
-                decay: r.option(|r| {
-                    Ok(Decay {
-                        t0: r.i64()?,
-                        t1: r.i64()?,
-                        min: r.u64()?,
-                    })
-                })?,
-            })
-        })?;
+                max: r.u64()?,
+                per: match (r.u8()?, r.u32()?) {
+                    (0, 0) => Per::Total,
+                    (1, seconds) => Per::Every(seconds),
+                    _ => return Err(PullError::MalformedTerms),
+                },
+            },
+            receive: r.option(|r| {
+                Ok(Receive {
+                    to: r.key()?,
+                    mint: r.key()?,
+                    min: r.u64()?,
+                    decay: r.option(|r| {
+                        Ok(Decay {
+                            t0: r.i64()?,
+                            t1: r.i64()?,
+                            min: r.u64()?,
+                        })
+                    })?,
+                })
+            })?,
+        };
         if !r.0.is_empty() {
             return Err(PullError::MalformedTerms);
         }
@@ -181,15 +131,7 @@ impl<'a> Terms<'a> {
             && self
                 .not_after
                 .is_none_or(|t| t > self.not_before && renderable(t));
-        let limits = self.limits();
-        let sized = (1..=MAX_LIMITS).contains(&(self.count as usize));
-        let positive = limits.iter().all(|l| l.max > 0 && l.per != Per::Every(0));
-        // A per-use cap alone bounds nothing across pulls: every account
-        // also needs a limit that persists
-        let capped = limits.iter().all(|l| {
-            let mut on_account = limits.iter().filter(|m| m.from == l.from);
-            on_account.any(|m| m.per != Per::Use)
-        });
+        let limit = self.limit.max > 0 && self.limit.per != Per::Every(0);
         let receive = self.receive.is_none_or(|x| {
             let decay = x
                 .decay
@@ -199,7 +141,7 @@ impl<'a> Terms<'a> {
         // Someone must be bound: a spender, or something the authority
         // receives. Otherwise the terms pay whoever finds them
         let bound = self.spender.is_some() || self.receive.is_some();
-        if !(window && sized && positive && capped && receive && bound) {
+        if !(window && limit && receive && bound) {
             return Err(PullError::InvalidTerms);
         }
         Ok(())
@@ -212,19 +154,15 @@ impl<'a> Terms<'a> {
         w.put(&self.not_before.to_le_bytes());
         option(w, self.not_after, |w, t| w.put(&t.to_le_bytes()));
         w.put(&self.salt.to_le_bytes());
-        w.put(&[self.count]);
-        for limit in self.limits() {
-            w.put(limit.from);
-            w.put(limit.mint);
-            w.put(&limit.max.to_le_bytes());
-            let (tag, seconds) = match limit.per {
-                Per::Total => (0, 0),
-                Per::Every(seconds) => (1, seconds),
-                Per::Use => (2, 0),
-            };
-            w.put(&[tag]);
-            w.put(&seconds.to_le_bytes());
-        }
+        w.put(self.limit.from);
+        w.put(self.limit.mint);
+        w.put(&self.limit.max.to_le_bytes());
+        let (tag, seconds) = match self.limit.per {
+            Per::Total => (0, 0),
+            Per::Every(seconds) => (1, seconds),
+        };
+        w.put(&[tag]);
+        w.put(&seconds.to_le_bytes());
         option(w, self.receive, |w, x| {
             w.put(x.to);
             w.put(x.mint);

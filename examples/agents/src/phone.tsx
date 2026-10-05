@@ -37,7 +37,7 @@ export function Phone() {
             let revoked = false;
             if (mine) {
                 const policy = await fetchPolicy(rpc, unb64(shared.budget!.terms), shared.clock);
-                spent = policy?.spent[0] ?? 0n;
+                spent = policy?.spent ?? 0n;
                 // The budget is the policy: closing it is revoking it
                 revoked = !policy;
             }

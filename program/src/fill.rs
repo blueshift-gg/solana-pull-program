@@ -12,10 +12,11 @@ use pull_core::{errors::PullError, terms::Terms, Sink};
 /// # Fill
 ///
 /// Run a signed intent: terms the authority signed as text, good for one use.
-/// Nothing is stored but one bit, the intent's nonce, so intents run in any
-/// order and none can run twice. The authority sends no transaction.
+/// Nothing is stored but one bit, the intent's nonce, which stays set
+/// forever: intents run in any order and none can run twice. The authority
+/// sends no transaction.
 ///
-/// > Check the window and the spender, and the amount against every limit
+/// > Check the window and the spender, and the amount against the limit
 /// > Verify the authority's signature over the rendered text
 /// > Use the nonce
 /// > Transfer from the source, as the engine delegate
@@ -25,7 +26,7 @@ use pull_core::{errors::PullError, terms::Terms, Sink};
 ///
 /// 1. spender:         [signer]
 /// 2. payer:           [signer, mut]   funds the page of nonces if it is new
-/// 3. nonces:          [mut]           PDA [NONCES_SEED, authority, expiry day, salt / NONCE_BITS]
+/// 3. nonces:          [mut]           PDA [NONCES_SEED, authority, salt / NONCE_BITS]
 /// 4. system_program:  [executable]
 /// 5. from:            [mut]           the authority's token account
 /// 6. mint:                            its mint
@@ -54,7 +55,7 @@ use pull_core::{errors::PullError, terms::Terms, Sink};
 ///   check since the CPIs fail otherwise
 ///
 /// Instruction Checks:
-/// - Terms: canonical and valid; they expire, and every limit is on `from`
+/// - Terms: canonical and valid
 ///
 /// Event Data:
 /// - discriminator: u8, (255u8, 10u8)
@@ -71,7 +72,6 @@ pub struct Fill<'a> {
     pub amount: u64,
     pub signature: &'a [u8; 64],
     pub terms: Terms<'a>,
-    pub not_after: i64,
 }
 
 impl<'a> TryFrom<(&'a [u8], &'a [AccountInfo])> for Fill<'a> {
@@ -91,11 +91,6 @@ impl<'a> TryFrom<(&'a [u8], &'a [AccountInfo])> for Fill<'a> {
 
         // Instruction Checks
         let terms = Terms::decode(bytes)?;
-        // One use needs an end, and one source so the text names every mint this instruction holds
-        let not_after = terms.not_after.ok_or(PullError::InvalidIntent)?;
-        if terms.limits().iter().any(|l| l.from.ne(from.key())) {
-            return Err(PullError::InvalidIntent.into());
-        }
 
         // Account Checks
         if !spender.is_signer() {
@@ -120,7 +115,6 @@ impl<'a> TryFrom<(&'a [u8], &'a [AccountInfo])> for Fill<'a> {
             amount: u64::from_le_bytes(*amount),
             signature,
             terms,
-            not_after,
         })
     }
 }
@@ -133,25 +127,15 @@ impl<'a> Fill<'a> {
         let (legs, terms, amount) = (&self.legs, &self.terms, self.amount);
 
         legs.check(terms, now)?;
-        // One use: every limit starts unspent, whatever it counts over
-        for limit in terms.limits() {
-            if limit.mint.ne(legs.mint.key()) {
-                return Err(PullError::InvalidTarget.into());
-            }
-            if amount > limit.max {
-                return Err(PullError::LimitExceeded.into());
-            }
+        // One use: the limit starts unspent, whatever it counts over
+        legs.check_source(&terms.limit)?;
+        if amount > terms.limit.max {
+            return Err(PullError::LimitExceeded.into());
         }
         self.verify()?;
 
         // The nonce is what makes it one use
-        let page = nonces_for(
-            self.payer,
-            self.nonces,
-            terms.authority,
-            self.not_after,
-            terms.salt,
-        )?;
+        let page = nonces_for(self.payer, self.nonces, terms.authority, terms.salt)?;
         if !page.take(terms.salt) {
             return Err(PullError::NonceUsed.into());
         }

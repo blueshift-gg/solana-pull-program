@@ -18,7 +18,7 @@ struct TermsJson {
     not_before: i64,
     not_after: Option<i64>,
     salt: String,
-    limits: Vec<LimitJson>,
+    limit: LimitJson,
     receive: Option<ReceiveJson>,
 }
 
@@ -35,7 +35,6 @@ struct LimitJson {
 enum PerJson {
     Total,
     Every(u32),
-    Use,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -61,27 +60,16 @@ pub fn encode_terms(json: &str) -> Result<Vec<u8>, JsError> {
     let spender = j.spender.as_deref().map(key).transpose()?;
 
     // Own every key first; the core's terms borrow them.
-    let keys = j
-        .limits
-        .iter()
-        .map(|l| Ok((key(&l.from)?, key(&l.mint)?)))
-        .collect::<Result<Vec<_>, JsError>>()?;
-    let limits = keys
-        .iter()
-        .zip(&j.limits)
-        .map(|((from, mint), l)| {
-            Ok(Limit {
-                from,
-                mint,
-                max: l.max.parse()?,
-                per: match l.per {
-                    PerJson::Total => Per::Total,
-                    PerJson::Every(seconds) => Per::Every(seconds),
-                    PerJson::Use => Per::Use,
-                },
-            })
-        })
-        .collect::<Result<Vec<_>, JsError>>()?;
+    let (from, mint) = (key(&j.limit.from)?, key(&j.limit.mint)?);
+    let limit = Limit {
+        from: &from,
+        mint: &mint,
+        max: j.limit.max.parse()?,
+        per: match j.limit.per {
+            PerJson::Total => Per::Total,
+            PerJson::Every(seconds) => Per::Every(seconds),
+        },
+    };
     let paid = match &j.receive {
         Some(x) => Some((key(&x.to)?, key(&x.mint)?)),
         None => None,
@@ -103,14 +91,16 @@ pub fn encode_terms(json: &str) -> Result<Vec<u8>, JsError> {
         _ => None,
     };
 
-    let terms = Terms::new(
-        &authority,
-        spender.as_ref(),
-        (j.not_before, j.not_after),
-        j.salt.parse()?,
-        &limits,
+    let terms = Terms {
+        cluster: pull_core::constants::CLUSTER,
+        authority: &authority,
+        spender: spender.as_ref(),
+        not_before: j.not_before,
+        not_after: j.not_after,
+        salt: j.salt.parse()?,
+        limit,
         receive,
-    );
+    };
     terms.validate().map_err(error)?;
     let mut bytes = Vec::new();
     terms.write(&mut bytes);
@@ -121,27 +111,21 @@ pub fn encode_terms(json: &str) -> Result<Vec<u8>, JsError> {
 #[wasm_bindgen(js_name = decodeTerms)]
 pub fn decode_terms(bytes: &[u8]) -> Result<String, JsError> {
     let t = Terms::decode(bytes).map_err(error)?;
-    let limits = t
-        .limits()
-        .iter()
-        .map(|l| LimitJson {
-            from: b58(l.from),
-            mint: b58(l.mint),
-            max: l.max.to_string(),
-            per: match l.per {
-                Per::Total => PerJson::Total,
-                Per::Every(seconds) => PerJson::Every(seconds),
-                Per::Use => PerJson::Use,
-            },
-        })
-        .collect();
     let json = TermsJson {
         authority: b58(t.authority),
         spender: t.spender.map(b58),
         not_before: t.not_before,
         not_after: t.not_after,
         salt: t.salt.to_string(),
-        limits,
+        limit: LimitJson {
+            from: b58(t.limit.from),
+            mint: b58(t.limit.mint),
+            max: t.limit.max.to_string(),
+            per: match t.limit.per {
+                Per::Total => PerJson::Total,
+                Per::Every(seconds) => PerJson::Every(seconds),
+            },
+        },
         receive: t.receive.map(|x| ReceiveJson {
             to: b58(x.to),
             mint: b58(x.mint),

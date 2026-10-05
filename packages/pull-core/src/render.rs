@@ -45,20 +45,18 @@ pub fn render(
         Some(key) => t.key(key),
     }
 
-    for limit in terms.limits() {
-        t.s("\nMAY TAKE: at most ");
-        t.amount(limit.max, (t.decimals)(limit.mint)?);
-        t.s(" of mint ");
-        t.key(limit.mint);
-        t.s(" from ");
-        t.key(limit.from);
-        match limit.per {
-            Per::Total => t.s(" in total"),
-            Per::Every(seconds) => {
-                t.s(" every ");
-                t.duration(seconds as u64);
-            }
-            Per::Use => t.s(" per use"),
+    let limit = terms.limit;
+    t.s("\nMAY TAKE: at most ");
+    t.amount(limit.max, (t.decimals)(limit.mint)?);
+    t.s(" of mint ");
+    t.key(limit.mint);
+    t.s(" from ");
+    t.key(limit.from);
+    match limit.per {
+        Per::Total => t.s(" in total"),
+        Per::Every(seconds) => {
+            t.s(" every ");
+            t.duration(seconds as u64);
         }
     }
     if let Some(receive) = terms.receive {

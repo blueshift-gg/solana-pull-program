@@ -40,7 +40,8 @@ Either way the spender fills the same intent, and the program enforces it the sa
 - Render with the canonical renderer (`pull-core`) and sign
   `"\xffsolana offchain" ‖ 0x01 ‖ 0x01 ‖ authority ‖ text`.
 - Show the `SPENDER`, every `MAY TAKE` line and the `MUST RECEIVE` line.
-- Refuse terms that are valid `until revoked`: a signed intent must expire.
+- For terms that are valid `until revoked`, ask for a separate, explicit confirmation:
+  the intent stays usable until it is filled or cancelled.
 
 The enabling `Approve`, and a policy's `Create` and `Close`, are ordinary transactions, so
 they need no feature.

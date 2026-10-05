@@ -86,13 +86,11 @@ function ask(title: string, rows: [string, string][], details: string, mustAckno
 async function describe(terms: Uint8Array) {
     const t = decode(terms);
     const decimals: Record<string, number> = {};
-    for (const mint of [...t.limits.map((l) => l.mint), ...(t.receive ? [t.receive.mint] : [])]) decimals[mint] ??= (await fetchMint(rpc, mint)).data.decimals;
+    for (const mint of [t.limit.mint, ...(t.receive ? [t.receive.mint] : [])]) decimals[mint] ??= (await fetchMint(rpc, mint)).data.decimals;
     const token = (mint: Address) => TOKENS[mint] ?? short(mint);
     const rows: [string, string][] = [];
-    for (const l of t.limits) {
-        const per = typeof l.per === 'object' ? ` every ${span(l.per.every)}` : l.per === 'total' ? ' in total' : ' per use';
-        rows.push(['Can take', `Up to ${amount(l.max, decimals[l.mint])} ${token(l.mint)}${per}`]);
-    }
+    const per = typeof t.limit.per === 'object' ? ` every ${span(t.limit.per.every)}` : ' in total';
+    rows.push(['Can take', `Up to ${amount(t.limit.max, decimals[t.limit.mint])} ${token(t.limit.mint)}${per}`]);
     if (t.receive) rows.push(['Only if', `You receive at least ${amount(t.receive.min, decimals[t.receive.mint])} ${token(t.receive.mint)} each time`]);
     rows.push(['Who can take it', t.spender ? short(t.spender) : 'Anyone who delivers that']);
     rows.push(['Ends', t.notAfter ? date(t.notAfter) : 'Never, until you revoke it']);
@@ -152,9 +150,8 @@ const wallet = {
                         const bytes = new Uint8Array(terms);
                         const approval = await describe(bytes);
                         if (decode(bytes).authority !== signer.address) throw new Error('This approval is for another account');
-                        // A signed intent must expire
-                        if (approval.never) throw new Error('An approval that never expires cannot be signed. Approve it with a transaction.');
-                        await ask('Approve a spending limit', approval.rows, approval.text);
+                        // An intent with no expiry stays usable until it runs or is cancelled
+                        await ask('Approve a payment', approval.rows, approval.text, approval.never ? 'I understand this approval does not expire' : undefined);
                         const signedOffchainMessage = message(bytes, approval.decimals);
                         return { signature: await signBytes(signer.keyPair.privateKey, signedOffchainMessage), signatureType: 'ed25519', signedOffchainMessage };
                     }),

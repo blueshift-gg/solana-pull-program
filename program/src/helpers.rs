@@ -30,7 +30,7 @@ pub fn create_pda(
     bump: u8,
 ) -> ProgramResult {
     let bump = [bump];
-    let padded: [&[u8]; 5] = core::array::from_fn(|i| match i.cmp(&seeds.len()) {
+    let padded: [&[u8]; 4] = core::array::from_fn(|i| match i.cmp(&seeds.len()) {
         core::cmp::Ordering::Less => seeds[i],
         core::cmp::Ordering::Equal => &bump,
         core::cmp::Ordering::Greater => &[],

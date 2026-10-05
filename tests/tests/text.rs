@@ -28,8 +28,8 @@ fn decoded(terms: &Terms) -> bool {
 fn subscription_renders_its_canonical_text() {
     let (authority, spender, usdc, from) =
         (key(AUTHORITY), key(SPENDER), key(USDC_MINT), key(FROM));
-    let limits = [limit(&from, &usdc, 8 * USDC, MONTHLY)];
-    let terms = terms(&authority, Some(&spender), None, &limits, None);
+    let limits = limit(&from, &usdc, 8 * USDC, MONTHLY);
+    let terms = terms(&authority, Some(&spender), None, limits, None);
 
     assert_eq!(
         text(&terms, decimals),
@@ -48,7 +48,7 @@ SALT: 0"
 fn order_renders_its_canonical_text() {
     let (authority, usdc, sol) = (key(AUTHORITY), key(USDC_MINT), key(SOL_MINT));
     let (from, to) = (key(FROM), key(TO));
-    let limits = [limit(&from, &usdc, 100 * USDC, Per::Total)];
+    let limits = limit(&from, &usdc, 100 * USDC, Per::Total);
     let receive = Receive {
         to: &to,
         mint: &sol,
@@ -59,7 +59,7 @@ fn order_renders_its_canonical_text() {
             min: 500_000_000,
         }),
     };
-    let terms = terms(&authority, None, Some(NOW + 600), &limits, Some(receive));
+    let terms = terms(&authority, None, Some(NOW + 600), limits, Some(receive));
 
     assert_eq!(
         text(&terms, decimals),
@@ -80,62 +80,49 @@ fn terms_round_trip_and_invalid_terms_are_refused() {
     let (authority, spender, usdc, sol) =
         (key(AUTHORITY), key(SPENDER), key(USDC_MINT), key(SOL_MINT));
     let (from, to) = (key(FROM), key(TO));
-    let limits = [
-        limit(&from, &usdc, 10 * USDC, MONTHLY),
-        limit(&from, &usdc, USDC, Per::Use),
-    ];
+    let monthly = limit(&from, &usdc, 10 * USDC, MONTHLY);
     let receive = Receive {
         to: &to,
         mint: &sol,
         min: 3,
         decay: None,
     };
-    let valid = terms(&authority, Some(&spender), None, &limits, Some(receive));
+    let valid = terms(&authority, Some(&spender), None, monthly, Some(receive));
     let bytes = encode(&valid);
-    let back = Terms::decode(&bytes).unwrap();
-    assert_eq!(encode(&back), bytes);
-    assert_eq!(back.limits(), limits);
-    assert_eq!(back.receive, Some(receive));
+    assert_eq!(Terms::decode(&bytes).unwrap(), valid);
 
     // Nobody bound: anyone may spend, and the owner receives nothing
-    assert!(!decoded(&terms(&authority, None, None, &limits, None)));
+    assert!(!decoded(&terms(&authority, None, None, monthly, None)));
     assert!(decoded(&terms(
         &authority,
         None,
         None,
-        &limits,
+        monthly,
         Some(receive)
     )));
-    // A per-use cap with no limit that persists
-    let alone = [limit(&from, &usdc, USDC, Per::Use)];
+    // A limit of nothing, and a window of no length
+    let nothing = limit(&from, &usdc, 0, Per::Total);
     assert!(!decoded(&terms(
         &authority,
         Some(&spender),
         None,
-        &alone,
+        nothing,
         None
     )));
-    // No limits, and more than the maximum
+    let no_window = limit(&from, &usdc, USDC, Per::Every(0));
     assert!(!decoded(&terms(
         &authority,
         Some(&spender),
         None,
-        &[],
+        no_window,
         None
     )));
-    let many = [limit(&from, &usdc, USDC, Per::Total); 9];
-    assert!(decoded(&terms(
-        &authority,
-        Some(&spender),
-        None,
-        &many[..8],
-        None
-    )));
+    // An expiry that is not after the start
     assert!(!decoded(&terms(
         &authority,
         Some(&spender),
-        None,
-        &many,
+        Some(NOW),
+        monthly,
         None
     )));
 }
@@ -148,11 +135,6 @@ fn every_byte_of_the_terms_is_visible_in_the_text() {
     let (authority, spender, usdc, sol) =
         (key(AUTHORITY), key(SPENDER), key(USDC_MINT), key(SOL_MINT));
     let (from, to) = (key(FROM), key(TO));
-    let limits = [
-        limit(&from, &usdc, 10 * USDC, MONTHLY),
-        limit(&from, &usdc, USDC, Per::Use),
-        limit(&from, &usdc, 100 * USDC, Per::Total),
-    ];
     let receive = Receive {
         to: &to,
         mint: &sol,
@@ -163,15 +145,11 @@ fn every_byte_of_the_terms_is_visible_in_the_text() {
             min: 500_000_000,
         }),
     };
-    let mut order = terms(
-        &authority,
-        None,
-        Some(NOW + 600),
-        &limits[2..],
-        Some(receive),
-    );
+    let total = limit(&from, &usdc, 100 * USDC, Per::Total);
+    let mut order = terms(&authority, None, Some(NOW + 600), total, Some(receive));
     order.salt = 7;
-    let subscription = terms(&authority, Some(&spender), None, &limits, None);
+    let monthly = limit(&from, &usdc, 10 * USDC, MONTHLY);
+    let subscription = terms(&authority, Some(&spender), None, monthly, None);
 
     let render = |bytes: &[u8]| {
         let terms = Terms::decode(bytes).ok()?;
