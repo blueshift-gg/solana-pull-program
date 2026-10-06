@@ -79,11 +79,14 @@ function legs(p: Legs): AccountMeta[] {
  * spender's token account that pays it; the program moves the payment itself
  * and checks what arrives.
  */
-export const getPullInstruction = async (p: Legs & { spender: TransactionSigner; amount: bigint }): Promise<Instruction> => ({
-    accounts: [signer(p.spender), writable(await policyAddress(p.terms)), ...legs(p)],
-    data: Uint8Array.of(1, ...getU64Encoder().encode(p.amount)),
-    programAddress: PULL_PROGRAM_ADDRESS,
-});
+export const getPullInstruction = async (p: Legs & { spender: TransactionSigner; amount: bigint; reference?: Uint8Array }): Promise<Instruction> => {
+    if (p.reference && p.reference.length !== 32) throw new Error('a reference is 32 bytes');
+    return {
+        accounts: [signer(p.spender), writable(await policyAddress(p.terms)), ...legs(p)],
+        data: Uint8Array.of(1, ...getU64Encoder().encode(p.amount), ...(p.reference ?? [])),
+        programAddress: PULL_PROGRAM_ADDRESS,
+    };
+};
 
 /**
  * Run a signed intent, once: `terms` the authority signed as text

@@ -113,6 +113,16 @@ pub fn balance(account: &AccountInfo, mint: &Pubkey, owner: &Pubkey) -> Result<u
     Ok(u64::from_le_bytes(data[64..72].try_into().unwrap()))
 }
 
+/// What is left of the engine's approval on token account `account`.
+pub fn allowance(account: &AccountInfo) -> Result<u64, PullError> {
+    let data = token_data(account, 165, 2)?;
+    // delegate: COption<Pubkey> at 72, delegated_amount at 121
+    if data[72..76].ne(&[1, 0, 0, 0]) || data[76..108].ne(&ENGINE) {
+        return Err(PullError::NotDelegate);
+    }
+    Ok(u64::from_le_bytes(data[121..129].try_into().unwrap()))
+}
+
 /// `TransferChecked`, signed by the engine PDA when `authority` is the engine
 /// (a pull, as delegate) and by the transaction otherwise (the spender paying
 /// the price). The instruction layout is shared by SPL Token and Token-2022.

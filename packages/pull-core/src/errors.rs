@@ -56,12 +56,20 @@ pub enum PullError {
     NotReceived,
     /// Only the engine PDA may invoke the event instruction
     InvalidEventAuthority,
+
+    /// The engine is not the delegate of the account pulled from: it was never
+    /// enabled, another `Approve` replaced it, or its approval ran out
+    NotDelegate,
+    /// The pull exceeds what is left of the account's approval
+    AllowanceExceeded,
+    /// The account pulled from holds less than the pull
+    InsufficientFunds,
 }
 
 impl PullError {
     /// Every error in code order, so clients can name a code: `ALL[code]`.
     /// A new variant goes here too; the test below checks the order.
-    pub const ALL: [PullError; 25] = [
+    pub const ALL: [PullError; 28] = [
         PullError::NotSigner,
         PullError::NotMutable,
         PullError::InvalidAccountOwner,
@@ -87,6 +95,9 @@ impl PullError {
         PullError::Overflow,
         PullError::NotReceived,
         PullError::InvalidEventAuthority,
+        PullError::NotDelegate,
+        PullError::AllowanceExceeded,
+        PullError::InsufficientFunds,
     ];
 }
 

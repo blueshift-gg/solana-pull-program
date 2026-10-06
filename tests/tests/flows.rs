@@ -339,6 +339,87 @@ fn a_policy_reaches_only_its_authoritys_accounts() {
     assert_eq!(f.balance(&victim.usdc), 100 * USDC);
 }
 
+/// A pull the token program would refuse says why in this program's own
+/// codes, so a merchant knows whether to ask the owner to enable again or to
+/// top up.
+#[test]
+fn a_refused_pull_names_its_cause() {
+    let mut f = Fixture::new();
+    let user = f.fresh_wallet(100 * USDC, 0);
+    let merchant = f.wallet(0, 0);
+    let (u, m, usdc) = (
+        user.address().to_bytes(),
+        merchant.address().to_bytes(),
+        f.usdc.to_bytes(),
+    );
+    let user_usdc = user.usdc.to_bytes();
+
+    let limits = limit(&user_usdc, &usdc, 1_000 * USDC, Per::Total);
+    let bytes = encode(&terms(&u, Some(&m), None, limits, None));
+    let create = create(&user.address(), &user.address(), &bytes);
+    f.send(&[create], &[&user.key]).unwrap();
+
+    let pull = |f: &mut Fixture, amount: u64| {
+        let accounts = (user.usdc, f.usdc, merchant.usdc);
+        let m = merchant.address();
+        let ix = pull(&m, &user.address(), &bytes, accounts, amount, None, TOKEN);
+        f.send(&[ix], &[&merchant.key])
+    };
+    // Never enabled
+    assert!(refused(pull(&mut f, USDC), PullError::NotDelegate));
+    // Enabled for 5 USDC: more is refused, and all of it uses the approval up
+    f.enable(&user, &user.usdc, 5 * USDC);
+    assert!(refused(
+        pull(&mut f, 6 * USDC),
+        PullError::AllowanceExceeded
+    ));
+    pull(&mut f, 5 * USDC).unwrap();
+    assert!(refused(pull(&mut f, USDC), PullError::NotDelegate));
+    // Enabled again, without a cap: the balance is what is left to run out
+    f.enable(&user, &user.usdc, u64::MAX);
+    assert!(refused(
+        pull(&mut f, 96 * USDC),
+        PullError::InsufficientFunds
+    ));
+    pull(&mut f, 95 * USDC).unwrap();
+}
+
+/// A spender tags a pull with its own id, and the event carries it.
+#[test]
+fn a_pull_carries_the_spenders_reference() {
+    let mut f = Fixture::new();
+    let user = f.wallet(100 * USDC, 0);
+    let merchant = f.wallet(0, 0);
+    let (u, m, usdc) = (
+        user.address().to_bytes(),
+        merchant.address().to_bytes(),
+        f.usdc.to_bytes(),
+    );
+    let user_usdc = user.usdc.to_bytes();
+
+    let limits = limit(&user_usdc, &usdc, 10 * USDC, MONTHLY);
+    let bytes = encode(&terms(&u, Some(&m), None, limits, None));
+    let create = create(&user.address(), &user.address(), &bytes);
+    f.send(&[create], &[&user.key]).unwrap();
+
+    let pull = |f: &mut Fixture, reference: &[u8]| {
+        let accounts = (user.usdc, f.usdc, merchant.usdc);
+        let (m, u) = (merchant.address(), user.address());
+        let ix = pull_for(&m, &u, &bytes, accounts, USDC, None, TOKEN, reference);
+        f.send(&[ix], &[&merchant.key])
+    };
+    let event = |meta: litesvm::types::TransactionMetadata| {
+        let inner = meta.inner_instructions.concat();
+        inner.last().unwrap().instruction.data.clone()
+    };
+    let invoice = [7; 32];
+    assert!(event(pull(&mut f, &invoice).unwrap()).ends_with(&invoice));
+    assert!(event(pull(&mut f, &[]).unwrap()).ends_with(&[0; 32]));
+    // A reference is 32 bytes or absent
+    assert!(pull(&mut f, &[7; 31]).is_err());
+    assert_eq!(f.balance(&merchant.usdc), 2 * USDC);
+}
+
 /// A Token-2022 transfer fee comes out of what arrives. The payer never gives
 /// up more than the limit, and a payment in such a token is refused unless
 /// the authority receives all of it.

@@ -1,5 +1,5 @@
 use crate::events::emit;
-use crate::helpers::{balance, transfer};
+use crate::helpers::{allowance, balance, transfer};
 use crate::state::policy;
 use pinocchio::log::sol_log;
 use pinocchio::sysvars::{clock::Clock, Sysvar};
@@ -48,7 +48,14 @@ impl Legs<'_> {
     /// If the terms say what the authority receives, the spender pays it, and
     /// all of it must arrive. Returns what was paid.
     pub fn settle(&self, terms: &Terms, amount: u64, now: i64) -> Result<u64, ProgramError> {
-        balance(self.from, self.mint.key(), terms.authority)?;
+        let held = balance(self.from, self.mint.key(), terms.authority)?;
+        // Name what the token program would only refuse with its own codes
+        if allowance(self.from)? < amount {
+            return Err(PullError::AllowanceExceeded.into());
+        }
+        if held < amount {
+            return Err(PullError::InsufficientFunds.into());
+        }
         transfer(self.from, self.mint, self.to, self.engine, amount)?;
 
         let Some(receive) = terms.receive else {
@@ -102,6 +109,8 @@ impl Legs<'_> {
 ///
 /// Parameters:
 /// 1. amount: u64,
+/// 2. reference: [u8; 32],    optional: the spender's own id for this pull,
+///    an invoice or an order; emitted, never stored
 ///
 /// Account Checks:
 /// - Spender: signer; the one the terms name, checked in process
@@ -115,11 +124,13 @@ impl Legs<'_> {
 /// - spender: Pubkey,
 /// - amount: u64,
 /// - paid: u64,
+/// - reference: [u8; 32], (zeros when the pull gave none)
 pub struct Pull<'a> {
     pub policy: &'a AccountInfo,
     pub program: &'a AccountInfo,
     pub legs: Legs<'a>,
     pub amount: u64,
+    pub reference: [u8; 32],
 }
 
 impl<'a> TryFrom<(&'a [u8], &'a [AccountInfo])> for Pull<'a> {
@@ -142,6 +153,12 @@ impl<'a> TryFrom<(&'a [u8], &'a [AccountInfo])> for Pull<'a> {
             return Err(PullError::NotMutable.into());
         }
 
+        let (amount, reference) = match data.len() {
+            8 => (data, [0; 32]),
+            40 => (&data[..8], data[8..].try_into().unwrap()),
+            _ => return Err(ProgramError::InvalidInstructionData),
+        };
+
         Ok(Self {
             policy,
             program,
@@ -153,10 +170,8 @@ impl<'a> TryFrom<(&'a [u8], &'a [AccountInfo])> for Pull<'a> {
                 engine,
                 payment,
             },
-            amount: u64::from_le_bytes(
-                data.try_into()
-                    .map_err(|_| ProgramError::InvalidInstructionData)?,
-            ),
+            amount: u64::from_le_bytes(amount.try_into().unwrap()),
+            reference,
         })
     }
 }
@@ -195,6 +210,7 @@ impl<'a> Pull<'a> {
                 legs.spender.key(),
                 &amount.to_le_bytes(),
                 &paid.to_le_bytes(),
+                &self.reference,
             ],
         )
     }

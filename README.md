@@ -118,9 +118,18 @@ A page of nonces costs about 0.002 SOL once, paid by whoever runs or cancels the
 intent in it.
 
 Enabling a token account is an SPL `Approve` of the program's engine address, which is a
-transaction. Its amount caps what every policy and intent on the account can take in
-total; the SDK's `getEnableInstruction` takes it as an option. A token account has one
-delegate, so any other `Approve` on it stops its policies and intents.
+transaction. The SDK's `getEnableInstruction` approves without a cap, so the only limits
+are the ones in the terms; it takes a cap as an option, and a cap that runs out takes
+the delegate away with it. A token account has one delegate, so any other `Approve` on
+it stops its policies and intents too. Either way the same `Approve` again restores
+them as they were: nothing is created or signed anew.
+
+A pull that cannot move the tokens says why: `NotDelegate`, `AllowanceExceeded` or
+`InsufficientFunds`. `fetchSeat` reads the same for a token account before anyone
+tries, and `fetchPolicies` lists the policies an owner created or a spender may use.
+
+`Pull` takes an optional 32-byte reference, the spender's own id for an invoice or an
+order. The program does not store it; the event carries it.
 
 ## Cost
 
@@ -128,7 +137,7 @@ LiteSVM, the instruction alone, one run each:
 
 | | CU |
 |---|---|
-| `Pull` | 4.2k |
+| `Pull` | 4.3k |
 | `Pull` that also delivers to the owner | 5.8k |
 | `Create` | 6k to 10k |
 | `Close` | 2.2k |

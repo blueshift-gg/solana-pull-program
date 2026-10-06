@@ -296,6 +296,30 @@ pub fn pull(
     payment: Option<Pay>,
     token_program: Address,
 ) -> Instruction {
+    pull_for(
+        spender,
+        authority,
+        bytes,
+        take,
+        amount,
+        payment,
+        token_program,
+        &[],
+    )
+}
+
+/// A pull that carries the spender's `reference` for it: 32 bytes, or none.
+#[allow(clippy::too_many_arguments)]
+pub fn pull_for(
+    spender: &Address,
+    authority: &Address,
+    bytes: &[u8],
+    take: Take,
+    amount: u64,
+    payment: Option<Pay>,
+    token_program: Address,
+    reference: &[u8],
+) -> Instruction {
     let mut accounts = vec![
         AccountMeta::new_readonly(*spender, true),
         AccountMeta::new(policy_pda(authority, bytes), false),
@@ -304,7 +328,7 @@ pub fn pull(
     Instruction {
         program_id: PROGRAM,
         accounts,
-        data: [&[1][..], &amount.to_le_bytes()].concat(),
+        data: [&[1][..], &amount.to_le_bytes(), reference].concat(),
     }
 }
 
