@@ -39,6 +39,29 @@ macro_rules! account {
     };
 }
 
+/// An authority's profile. Its policies are numbered from 1 as they are
+/// created; every policy numbered `stale` or less is invalid. An intent is
+/// signed over `nonce_index`, so changing it invalidates every intent signed
+/// before. It is never closed: a profile opened again would count from zero
+/// and bring old policies back.
+#[repr(C)]
+pub struct Profile {
+    tag: [u8; 1],
+    pub authority: Pubkey,
+    policies: [u8; 8],
+    stale: [u8; 8],
+    nonce_index: [u8; 8],
+}
+
+account!(Profile);
+
+impl Profile {
+    field!(tag, set_tag, u8);
+    field!(policies, set_policies, u64);
+    field!(stale, set_stale, u64);
+    field!(nonce_index, set_nonce_index, u64);
+}
+
 /// A policy: this header, then the canonical terms.
 #[repr(C)]
 pub struct Policy {
@@ -48,6 +71,8 @@ pub struct Policy {
     consumed: [u8; 8],
     /// Paid the rent; refunded by `Close`.
     pub payer: Pubkey,
+    /// Its number among the authority's policies.
+    index: [u8; 8],
     terms_len: [u8; 2],
 }
 
@@ -57,6 +82,7 @@ impl Policy {
     field!(tag, set_tag, u8);
     field!(rolled, set_rolled, i64);
     field!(consumed, set_consumed, u64);
+    field!(index, set_index, u64);
     field!(terms_len, set_terms_len, u16);
 
     /// What the limit has consumed at `now`. A periodic limit starts each
@@ -76,14 +102,18 @@ impl Policy {
 }
 
 /// One page of the nonces an authority's signed intents have used or
-/// cancelled: one bit each, so intents run in any order. It is never closed.
+/// cancelled: one bit each, so intents run in any order. It closes once the
+/// profile's nonce index has moved on from its own.
 #[repr(C)]
 pub struct Nonces {
     tag: [u8; 1],
     /// The page's place, recorded when it was created at its PDA, so a fill
     /// compares these instead of deriving the address again.
     pub authority: Pubkey,
+    index: [u8; 8],
     page: [u8; 8],
+    /// Paid the rent; refunded by `Close`.
+    pub payer: Pubkey,
     bits: [u8; NONCE_BITS / 8],
 }
 
@@ -91,6 +121,7 @@ account!(Nonces);
 
 impl Nonces {
     field!(tag, set_tag, u8);
+    field!(index, set_index, u64);
     field!(page, set_page, u64);
 
     /// Mark the nonce of `salt` used; false if it already was.
@@ -101,14 +132,10 @@ impl Nonces {
         *byte |= mask;
         fresh
     }
-
-    /// Mark every nonce of the page used.
-    pub fn take_all(&mut self) {
-        self.bits = [u8::MAX; NONCE_BITS / 8];
-    }
 }
 
 const _: () = {
     assert!(core::mem::size_of::<Policy>() == POLICY_LEN);
     assert!(core::mem::size_of::<Nonces>() == NONCES_LEN);
+    assert!(core::mem::size_of::<Profile>() == PROFILE_LEN);
 };

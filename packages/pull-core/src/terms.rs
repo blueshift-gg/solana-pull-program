@@ -19,13 +19,15 @@ pub enum Per {
 }
 
 /// What may go out: "at most `max` of `mint` may leave `from`", a token
-/// account of the authority.
+/// account of the authority, "and only to `to`" if the terms name where.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Limit<'a> {
     pub from: &'a Pubkey,
     pub mint: &'a Pubkey,
     pub max: u64,
     pub per: Per,
+    /// The only token account the tokens may go to. `None` leaves it to the spender.
+    pub to: Option<&'a Pubkey>,
 }
 
 /// The minimum moves in a straight line to `min` between `t0` and `t1`.
@@ -51,7 +53,8 @@ pub struct Receive<'a> {
 pub struct Terms<'a> {
     pub cluster: u8,
     pub authority: &'a Pubkey,
-    /// Who may pull. `None` is anyone, which is only valid if the authority receives something.
+    /// Who may pull. `None` is anyone, which is only valid if the terms name
+    /// where the tokens go or what the authority receives.
     pub spender: Option<&'a Pubkey>,
     pub not_before: i64,
     pub not_after: Option<i64>,
@@ -92,11 +95,12 @@ impl<'a> Terms<'a> {
                 from: r.key()?,
                 mint: r.key()?,
                 max: r.u64()?,
-                per: match (r.u8()?, r.u32()?) {
-                    (0, 0) => Per::Total,
-                    (1, seconds) => Per::Every(seconds),
+                per: match r.u8()? {
+                    0 => Per::Total,
+                    1 => Per::Every(r.u32()?),
                     _ => return Err(PullError::MalformedTerms),
                 },
+                to: r.option(|r| r.key())?,
             },
             receive: r.option(|r| {
                 Ok(Receive {
@@ -138,9 +142,9 @@ impl<'a> Terms<'a> {
                 .is_none_or(|d| renderable(d.t0) && renderable(d.t1) && d.t0 < d.t1 && d.min > 0);
             x.min > 0 && decay
         });
-        // Someone must be bound: a spender, or something the authority
-        // receives. Otherwise the terms pay whoever finds them
-        let bound = self.spender.is_some() || self.receive.is_some();
+        // Something must be bound: who takes, where it goes, or what the
+        // authority receives. Otherwise the terms pay whoever finds them
+        let bound = self.spender.is_some() || self.limit.to.is_some() || self.receive.is_some();
         if !(window && limit && receive && bound) {
             return Err(PullError::InvalidTerms);
         }
@@ -157,12 +161,14 @@ impl<'a> Terms<'a> {
         w.put(self.limit.from);
         w.put(self.limit.mint);
         w.put(&self.limit.max.to_le_bytes());
-        let (tag, seconds) = match self.limit.per {
-            Per::Total => (0, 0),
-            Per::Every(seconds) => (1, seconds),
-        };
-        w.put(&[tag]);
-        w.put(&seconds.to_le_bytes());
+        match self.limit.per {
+            Per::Total => w.put(&[0]),
+            Per::Every(seconds) => {
+                w.put(&[1]);
+                w.put(&seconds.to_le_bytes());
+            }
+        }
+        option(w, self.limit.to, |w, key| w.put(key));
         option(w, self.receive, |w, x| {
             w.put(x.to);
             w.put(x.mint);

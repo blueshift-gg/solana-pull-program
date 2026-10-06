@@ -1,5 +1,6 @@
 //! Test fixture: LiteSVM with the Pull program, a USDC-like and a SOL-like
-//! mint, funded wallets that enabled the engine, and a builder per instruction.
+//! mint, funded wallets with a profile that enabled the engine, and a builder
+//! per instruction.
 //!
 //! Build the program and the CPI caller fixture first:
 //! `cargo build-sbf --manifest-path program/Cargo.toml --features localnet`
@@ -10,10 +11,10 @@ use litesvm::{types::TransactionResult, LiteSVM};
 use litesvm_token::{
     get_spl_account, spl_token, Approve, CreateAssociatedTokenAccount, CreateMint, MintTo,
 };
-use pull_core::render::{envelope, render};
+use pull_core::render::render;
+pub use pull_core::render::Envelope;
 use pull_core::terms::{Limit, Per, Receive, Terms};
 use pull_core::{constants::*, errors::PullError};
-use sha2::{Digest, Sha256};
 use solana_address::Address;
 use solana_clock::Clock;
 use solana_instruction::{AccountMeta, Instruction};
@@ -100,8 +101,16 @@ impl Fixture {
         wallet
     }
 
-    /// A funded wallet that has not enabled policies yet.
+    /// A funded wallet with a profile, whose token accounts are not enabled yet.
     pub fn fresh_wallet(&mut self, usdc: u64, sol: u64) -> Wallet {
+        let wallet = self.unopened_wallet(usdc, sol);
+        let key = wallet.address();
+        self.send(&[open(&key, &key)], &[&wallet.key]).unwrap();
+        wallet
+    }
+
+    /// A funded wallet that has no profile.
+    pub fn unopened_wallet(&mut self, usdc: u64, sol: u64) -> Wallet {
         let key = Keypair::new();
         let Self {
             svm,
@@ -150,6 +159,18 @@ impl Fixture {
             .amount
     }
 
+    /// The profile of `authority`: `(policies, stale, nonce_index)`.
+    pub fn profile(&self, authority: &Address) -> (u64, u64, u64) {
+        let data = self.svm.get_account(&profile_pda(authority)).unwrap().data;
+        let field = |at: usize| u64::from_le_bytes(data[at..at + 8].try_into().unwrap());
+        (field(33), field(41), field(49))
+    }
+
+    /// What an intent of `authority` is signed under now.
+    pub fn nonce_index(&self, authority: &Address) -> u64 {
+        self.profile(authority).2
+    }
+
     pub fn set_time(&mut self, unix_timestamp: i64) {
         let mut clock: Clock = self.svm.get_sysvar();
         clock.unix_timestamp = unix_timestamp;
@@ -188,37 +209,51 @@ pub fn encode(terms: &Terms) -> Vec<u8> {
     bytes
 }
 
-pub fn terms_id(bytes: &[u8]) -> [u8; 32] {
-    Sha256::digest(bytes).into()
-}
-
-/// The canonical text a wallet shows.
-pub fn text(terms: &Terms, decimals: impl Fn(&[u8; 32]) -> Result<u8, PullError>) -> String {
+/// The canonical text a wallet shows for an intent signed under nonce `index`.
+pub fn text(
+    terms: &Terms,
+    index: u64,
+    decimals: impl Fn(&[u8; 32]) -> Result<u8, PullError>,
+) -> String {
     let mut out = Vec::new();
-    render(terms, decimals, &mut out).unwrap();
+    render(terms, index, decimals, &mut out).unwrap();
     String::from_utf8(out).unwrap()
 }
 
-/// What a wallet signs through `solana:signOffchainMessage`.
+/// What a wallet signs through `solana:signOffchainMessage`: the text in an
+/// Offchain Message v1.
 pub fn sign(
     terms: &Terms,
+    index: u64,
+    key: &Keypair,
+    decimals: impl Fn(&[u8; 32]) -> Result<u8, PullError>,
+) -> [u8; 64] {
+    sign_as(Envelope::OffchainMessage, terms, index, key, decimals)
+}
+
+/// What a wallet signs for an intent, with or without an envelope.
+pub fn sign_as(
+    envelope: Envelope,
+    terms: &Terms,
+    index: u64,
     key: &Keypair,
     decimals: impl Fn(&[u8; 32]) -> Result<u8, PullError>,
 ) -> [u8; 64] {
     let mut message = Vec::new();
-    envelope(terms.authority, &mut message);
-    render(terms, decimals, &mut message).unwrap();
+    envelope.put(terms.authority, &mut message);
+    render(terms, index, decimals, &mut message).unwrap();
     let secret: [u8; 32] = key.to_bytes()[..32].try_into().unwrap();
     SigningKey::from_bytes(&secret).sign(&message).to_bytes()
 }
 
-/// "At most `max` of `mint` may leave `from`."
+/// "At most `max` of `mint` may leave `from`", to wherever the spender says.
 pub fn limit<'a>(from: &'a [u8; 32], mint: &'a [u8; 32], max: u64, per: Per) -> Limit<'a> {
     Limit {
         from,
         mint,
         max,
         per,
+        to: None,
     }
 }
 
@@ -242,18 +277,58 @@ pub fn terms<'a>(
     }
 }
 
-pub fn policy_pda(authority: &Address, bytes: &[u8]) -> Address {
-    pda(&[POLICY_SEED, authority.as_ref(), &terms_id(bytes)])
+pub fn profile_pda(authority: &Address) -> Address {
+    pda(&[PROFILE_SEED, authority.as_ref()])
 }
 
-/// Put a policy on chain: the authority signs, `payer` funds the rent.
-pub fn create(authority: &Address, payer: &Address, bytes: &[u8]) -> Instruction {
+/// Create the profile of `authority`: once, before its first policy or intent.
+pub fn open(authority: &Address, payer: &Address) -> Instruction {
     Instruction {
         program_id: PROGRAM,
         accounts: vec![
             AccountMeta::new_readonly(*authority, true),
             AccountMeta::new(*payer, true),
-            AccountMeta::new(policy_pda(authority, bytes), false),
+            AccountMeta::new(profile_pda(authority), false),
+            AccountMeta::new_readonly(SYSTEM, false),
+            AccountMeta::new_readonly(ENGINE_KEY, false),
+            AccountMeta::new_readonly(PROGRAM, false),
+        ],
+        data: vec![3],
+    }
+}
+
+pub const POLICIES: u8 = 1;
+pub const INTENTS: u8 = 2;
+
+/// End every policy of `authority` so far, every intent, or both.
+pub fn invalidate(authority: &Address, what: u8) -> Instruction {
+    Instruction {
+        program_id: PROGRAM,
+        accounts: vec![
+            AccountMeta::new_readonly(*authority, true),
+            AccountMeta::new(profile_pda(authority), false),
+            AccountMeta::new_readonly(ENGINE_KEY, false),
+            AccountMeta::new_readonly(PROGRAM, false),
+        ],
+        data: vec![4, what],
+    }
+}
+
+/// The `index`-th policy of `authority`, counted from 1.
+pub fn policy_pda(authority: &Address, index: u64) -> Address {
+    pda(&[POLICY_SEED, authority.as_ref(), &index.to_le_bytes()])
+}
+
+/// Put a policy on chain as the authority's `index`-th: the authority signs,
+/// `payer` funds the rent.
+pub fn create(authority: &Address, payer: &Address, index: u64, bytes: &[u8]) -> Instruction {
+    Instruction {
+        program_id: PROGRAM,
+        accounts: vec![
+            AccountMeta::new_readonly(*authority, true),
+            AccountMeta::new(*payer, true),
+            AccountMeta::new(profile_pda(authority), false),
+            AccountMeta::new(policy_pda(authority, index), false),
             AccountMeta::new_readonly(SYSTEM, false),
             AccountMeta::new_readonly(ENGINE_KEY, false),
             AccountMeta::new_readonly(PROGRAM, false),
@@ -286,11 +361,12 @@ fn legs((from, mint, to): Take, payment: Option<Pay>, token_program: Address) ->
     accounts
 }
 
-/// `spender` takes `amount` under a policy, paying what the authority receives if the terms say so.
+/// `spender` takes `amount` under the `index`-th policy of `authority`,
+/// paying what the authority receives if the terms say so.
 pub fn pull(
     spender: &Address,
     authority: &Address,
-    bytes: &[u8],
+    index: u64,
     take: Take,
     amount: u64,
     payment: Option<Pay>,
@@ -299,7 +375,7 @@ pub fn pull(
     pull_for(
         spender,
         authority,
-        bytes,
+        index,
         take,
         amount,
         payment,
@@ -313,7 +389,7 @@ pub fn pull(
 pub fn pull_for(
     spender: &Address,
     authority: &Address,
-    bytes: &[u8],
+    index: u64,
     take: Take,
     amount: u64,
     payment: Option<Pay>,
@@ -322,7 +398,8 @@ pub fn pull_for(
 ) -> Instruction {
     let mut accounts = vec![
         AccountMeta::new_readonly(*spender, true),
-        AccountMeta::new(policy_pda(authority, bytes), false),
+        AccountMeta::new(policy_pda(authority, index), false),
+        AccountMeta::new_readonly(profile_pda(authority), false),
     ];
     accounts.extend(legs(take, payment, token_program));
     Instruction {
@@ -332,16 +409,20 @@ pub fn pull_for(
     }
 }
 
-/// The page that holds the nonce of an intent of `authority` with this salt.
-pub fn nonces_pda(authority: &Address, salt: u64) -> Address {
+/// The page that holds the nonce of an intent of `authority` with this salt,
+/// signed under nonce `index`.
+pub fn nonces_pda(authority: &Address, index: u64, salt: u64) -> Address {
     let page = (salt / NONCE_BITS as u64).to_le_bytes();
-    pda(&[NONCES_SEED, authority.as_ref(), &page])
+    pda(&[NONCES_SEED, authority.as_ref(), &index.to_le_bytes(), &page])
 }
 
-/// `spender` runs a signed intent once, taking `amount`. It pays for the page of nonces.
+/// `spender` runs an intent signed under nonce `index` once, taking `amount`.
+/// It pays for the page of nonces. The signature is over an Offchain Message
+/// v1, as `sign` makes it.
 pub fn fill(
     spender: &Address,
     terms: &Terms,
+    index: u64,
     signature: &[u8; 64],
     take: Take,
     amount: u64,
@@ -351,41 +432,74 @@ pub fn fill(
     let mut accounts = vec![
         AccountMeta::new_readonly(*spender, true),
         AccountMeta::new(*spender, true),
-        AccountMeta::new(nonces_pda(&authority, terms.salt), false),
+        AccountMeta::new_readonly(profile_pda(&authority), false),
+        AccountMeta::new(nonces_pda(&authority, index, terms.salt), false),
         AccountMeta::new_readonly(SYSTEM, false),
     ];
     accounts.extend(legs(take, payment, TOKEN));
     Instruction {
         program_id: PROGRAM,
         accounts,
-        data: [&[10][..], &amount.to_le_bytes(), signature, &encode(terms)].concat(),
+        data: [
+            &[10][..],
+            &amount.to_le_bytes(),
+            &[1],
+            signature,
+            &encode(terms),
+        ]
+        .concat(),
     }
 }
 
-/// The authority uses up an intent's nonce, or with `page` every nonce of its page.
-pub fn cancel(authority: &Address, salt: u64, page: bool) -> Instruction {
+/// The authority uses up the nonce of one intent signed under nonce `index`.
+pub fn cancel(authority: &Address, index: u64, salt: u64) -> Instruction {
     Instruction {
         program_id: PROGRAM,
         accounts: vec![
             AccountMeta::new_readonly(*authority, true),
             AccountMeta::new(*authority, true),
-            AccountMeta::new(nonces_pda(authority, salt), false),
+            AccountMeta::new_readonly(profile_pda(authority), false),
+            AccountMeta::new(nonces_pda(authority, index, salt), false),
             AccountMeta::new_readonly(SYSTEM, false),
             AccountMeta::new_readonly(ENGINE_KEY, false),
             AccountMeta::new_readonly(PROGRAM, false),
         ],
-        data: [&[11][..], &salt.to_le_bytes(), &[page as u8]].concat(),
+        data: [&[11][..], &salt.to_le_bytes()].concat(),
     }
 }
 
-/// Close a policy; its rent goes to `payer`, the account that paid it.
-pub fn close(closer: &Address, account: &Address, payer: &Address) -> Instruction {
+/// The authority ends one policy; its rent goes to `payer`, the account that paid it.
+pub fn cancel_policy(authority: &Address, policy: &Address, payer: &Address) -> Instruction {
+    Instruction {
+        program_id: PROGRAM,
+        accounts: vec![
+            AccountMeta::new_readonly(*authority, true),
+            AccountMeta::new(*payer, false),
+            AccountMeta::new_readonly(profile_pda(authority), false),
+            AccountMeta::new(*policy, false),
+            AccountMeta::new_readonly(SYSTEM, false),
+            AccountMeta::new_readonly(ENGINE_KEY, false),
+            AccountMeta::new_readonly(PROGRAM, false),
+        ],
+        data: vec![11],
+    }
+}
+
+/// Anyone closes a policy or a page of nonces of `authority` that can never
+/// be used again; its rent goes to `payer`, the account that paid it.
+pub fn close(
+    closer: &Address,
+    account: &Address,
+    payer: &Address,
+    authority: &Address,
+) -> Instruction {
     Instruction {
         program_id: PROGRAM,
         accounts: vec![
             AccountMeta::new_readonly(*closer, true),
             AccountMeta::new(*account, false),
             AccountMeta::new(*payer, false),
+            AccountMeta::new_readonly(profile_pda(authority), false),
             AccountMeta::new_readonly(ENGINE_KEY, false),
             AccountMeta::new_readonly(PROGRAM, false),
         ],

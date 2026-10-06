@@ -13,7 +13,6 @@ ed25519-dalek = "2"
 litesvm = "0.16"
 litesvm-token = "0.16"
 pull-core = { workspace = true, features = ["localnet", "std"] }
-sha2 = "0.10"
 # Only to build a Token-2022 mint with a transfer fee.
 spl-token-2022-interface = "2.1.0"
 solana-account = "4.3.2"

@@ -28,18 +28,21 @@ fn decoded(terms: &Terms) -> bool {
 fn subscription_renders_its_canonical_text() {
     let (authority, spender, usdc, from) =
         (key(AUTHORITY), key(SPENDER), key(USDC_MINT), key(FROM));
-    let limits = limit(&from, &usdc, 8 * USDC, MONTHLY);
+    let to = key(TO);
+    let mut limits = limit(&from, &usdc, 8 * USDC, MONTHLY);
+    limits.to = Some(&to);
     let terms = terms(&authority, Some(&spender), None, limits, None);
 
     assert_eq!(
-        text(&terms, decimals),
+        text(&terms, 42, decimals),
         "Solana Pull v1
 cluster: localnet
 engine: PULLrgDYqK1yFKVTSbWieX3ARP7U2XUyrjxWXqKgVzA
 authority: 7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU
 SPENDER: GNxM82DJMja5ux5extFCEjbQ5C88hvcG7fvsiSCQumgs
-MAY TAKE: at most 8.000000 of mint EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v from 4dEfGh1uC6pK4CwNa5oZ2bJwmWv6kD6YQX7sKfM5tR2b every 30d
+MAY TAKE: at most 8.000000 of mint EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v from 4dEfGh1uC6pK4CwNa5oZ2bJwmWv6kD6YQX7sKfM5tR2b to 9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM every 30d
 VALID: from 2026-09-21T14:13:20Z until revoked
+INDEX: 42
 SALT: 0"
     );
 }
@@ -62,7 +65,7 @@ fn order_renders_its_canonical_text() {
     let terms = terms(&authority, None, Some(NOW + 600), limits, Some(receive));
 
     assert_eq!(
-        text(&terms, decimals),
+        text(&terms, 42, decimals),
         "Solana Pull v1
 cluster: localnet
 engine: PULLrgDYqK1yFKVTSbWieX3ARP7U2XUyrjxWXqKgVzA
@@ -71,6 +74,7 @@ SPENDER: anyone
 MAY TAKE: at most 100.000000 of mint EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v from 4dEfGh1uC6pK4CwNa5oZ2bJwmWv6kD6YQX7sKfM5tR2b in total
 MUST RECEIVE: at least 0.520000000 of mint So11111111111111111111111111111111111111112 in 9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM for each use, moving to 0.500000000 from 2026-09-21T14:13:20Z to 2026-09-21T14:18:20Z
 VALID: from 2026-09-21T14:13:20Z until 2026-09-21T14:23:20Z
+INDEX: 42
 SALT: 0"
     );
 }
@@ -91,8 +95,12 @@ fn terms_round_trip_and_invalid_terms_are_refused() {
     let bytes = encode(&valid);
     assert_eq!(Terms::decode(&bytes).unwrap(), valid);
 
-    // Nobody bound: anyone may spend, and the owner receives nothing
+    // Nothing bound: anyone may spend, to anywhere, and the owner receives nothing
     assert!(!decoded(&terms(&authority, None, None, monthly, None)));
+    // Anyone may send it on, but only to the account the terms name
+    let mut pinned = monthly;
+    pinned.to = Some(&to);
+    assert!(decoded(&terms(&authority, None, None, pinned, None)));
     assert!(decoded(&terms(
         &authority,
         None,
@@ -148,13 +156,14 @@ fn every_byte_of_the_terms_is_visible_in_the_text() {
     let total = limit(&from, &usdc, 100 * USDC, Per::Total);
     let mut order = terms(&authority, None, Some(NOW + 600), total, Some(receive));
     order.salt = 7;
-    let monthly = limit(&from, &usdc, 10 * USDC, MONTHLY);
+    let mut monthly = limit(&from, &usdc, 10 * USDC, MONTHLY);
+    monthly.to = Some(&to);
     let subscription = terms(&authority, Some(&spender), None, monthly, None);
 
     let render = |bytes: &[u8]| {
         let terms = Terms::decode(bytes).ok()?;
         let mut out = Vec::new();
-        pull_core::render::render(&terms, |_| Ok(6), &mut out).ok()?;
+        pull_core::render::render(&terms, 42, |_| Ok(6), &mut out).ok()?;
         Some(out)
     };
     for bytes in [encode(&order), encode(&subscription)] {

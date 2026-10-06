@@ -22,6 +22,3 @@ brine-ed25519 = { version = "0.9.3", features = ["fast-sha512"] }
 pull-core = { workspace = true }
 pinocchio = { workspace = true }
 pinocchio-system = "0.2.3"
-
-[target.'cfg(not(target_os = "solana"))'.dependencies]
-sha2 = { version = "0.10", default-features = false }

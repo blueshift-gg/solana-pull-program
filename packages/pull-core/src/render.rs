@@ -1,6 +1,9 @@
 //! Canonical text: what the authority sees and signs.
 //!
-//! Deterministic and printable ASCII only. The program renders
+//! Deterministic, and printable ASCII and newlines only: it is valid UTF-8
+//! that no wallet can take for a transaction, and it names the program, the
+//! cluster and the authority itself, so it needs no envelope to be safe.
+//! The program renders
 //! straight into the signature hasher; clients render into a buffer. Both run
 //! this code, so what is shown is what is verified.
 
@@ -18,16 +21,41 @@ type Result<T> = core::result::Result<T, PullError>;
 pub const DOMAIN: &[u8; 16] = b"\xffsolana offchain";
 const CLUSTERS: [&str; 4] = ["mainnet", "devnet", "testnet", "localnet"];
 
-/// The Offchain Message v1 preamble: domain, version 1, one signer.
-pub fn envelope(authority: &Pubkey, out: &mut impl Sink) {
-    out.put(DOMAIN);
-    out.put(&[1, 1]);
-    out.put(authority);
+/// What comes before the text in the bytes the authority signs. Wallets do
+/// not agree on one way to sign a message, so the program verifies either.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Envelope {
+    /// Nothing: the text alone, as `solana:signMessage` signs it.
+    Text,
+    /// The Offchain Message v1 preamble (domain, version 1, one signer), as
+    /// `solana:signOffchainMessage` signs it.
+    OffchainMessage,
 }
 
-/// Render `terms`. `decimals` resolves a mint's on-chain decimals.
+impl Envelope {
+    pub fn from_byte(byte: u8) -> Option<Self> {
+        match byte {
+            0 => Some(Self::Text),
+            1 => Some(Self::OffchainMessage),
+            _ => None,
+        }
+    }
+
+    /// Write what comes before the text.
+    pub fn put(self, authority: &Pubkey, out: &mut impl Sink) {
+        if self == Self::OffchainMessage {
+            out.put(DOMAIN);
+            out.put(&[1, 1]);
+            out.put(authority);
+        }
+    }
+}
+
+/// Render `terms` as an intent signed under the profile's nonce `index`.
+/// `decimals` resolves a mint's on-chain decimals.
 pub fn render(
     terms: &Terms,
+    index: u64,
     decimals: impl Fn(&Pubkey) -> Result<u8>,
     out: &mut impl Sink,
 ) -> Result<()> {
@@ -52,6 +80,10 @@ pub fn render(
     t.key(limit.mint);
     t.s(" from ");
     t.key(limit.from);
+    if let Some(to) = limit.to {
+        t.s(" to ");
+        t.key(to);
+    }
     match limit.per {
         Per::Total => t.s(" in total"),
         Per::Every(seconds) => {
@@ -85,6 +117,8 @@ pub fn render(
         None => t.s("revoked"),
         Some(end) => t.time(end)?,
     }
+    t.s("\nINDEX: ");
+    t.uint(index);
     t.s("\nSALT: ");
     t.uint(terms.salt);
     Ok(())

@@ -1864,7 +1864,6 @@ dependencies = [
  "pinocchio",
  "pinocchio-system",
  "pull-core",
- "sha2 0.10.9",
 ]
 
 [[package]]
@@ -1875,7 +1874,6 @@ dependencies = [
  "litesvm",
  "litesvm-token",
  "pull-core",
- "sha2 0.10.9",
  "solana-account",
  "solana-address 2.6.1",
  "solana-clock",
@@ -1884,17 +1882,6 @@ dependencies = [
  "solana-signer",
  "solana-transaction",
  "spl-token-2022-interface",
-]
-
-[[package]]
-name = "pull-wasm"
-version = "0.0.1"
-dependencies = [
- "five8",
- "pull-core",
- "serde",
- "serde_json",
- "wasm-bindgen",
 ]
 
 [[package]]

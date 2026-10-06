@@ -1,4 +1,4 @@
-//! Account lifecycle, token views and transfers, and hashing.
+//! Account lifecycle, token views and transfers, and entropy.
 
 use pinocchio::{
     account_info::AccountInfo,
@@ -30,7 +30,7 @@ pub fn create_pda(
     bump: u8,
 ) -> ProgramResult {
     let bump = [bump];
-    let padded: [&[u8]; 4] = core::array::from_fn(|i| match i.cmp(&seeds.len()) {
+    let padded: [&[u8]; 5] = core::array::from_fn(|i| match i.cmp(&seeds.len()) {
         core::cmp::Ordering::Less => seeds[i],
         core::cmp::Ordering::Equal => &bump,
         core::cmp::Ordering::Greater => &[],
@@ -38,6 +38,11 @@ pub fn create_pda(
     let signer_seeds = padded.map(Seed::from);
     let signer = [Signer::from(&signer_seeds[..=seeds.len()])];
 
+    // Whoever is recorded as the payer signed for it, even when the address
+    // already holds its rent: the rent of a closed account goes back there
+    if !payer.is_signer() {
+        return Err(PullError::NotSigner.into());
+    }
     let lamports = Rent::get()?.minimum_balance(space);
     if account.lamports() == 0 {
         return pinocchio_system::instructions::CreateAccount {
@@ -73,8 +78,11 @@ pub fn create_pda(
 
 /// Move every lamport to `to` and close a program-owned account.
 pub fn close(account: &AccountInfo, to: &AccountInfo) -> ProgramResult {
+    if account.key().eq(to.key()) {
+        return Err(PullError::InvalidPayer.into());
+    }
     // SAFETY: the program never holds a checked borrow on lamports, and `to`
-    // is distinct from `account` at every call site.
+    // is not `account`.
     unsafe {
         *to.borrow_mut_lamports_unchecked() = to
             .lamports()
@@ -84,15 +92,18 @@ pub fn close(account: &AccountInfo, to: &AccountInfo) -> ProgramResult {
     account.close()
 }
 
-/// Token account or mint data, by the base-layout length or Token-2022's
-/// account-type byte after it.
+/// Token account or mint data, by the base-layout length or, for Token-2022
+/// with extensions, the account-type byte after it. A multisig is 355 bytes
+/// in both programs, and never an account or a mint.
 fn token_data(account: &AccountInfo, base_len: usize, kind: u8) -> Result<&[u8], PullError> {
-    if !account.is_owned_by(&TOKEN_PROGRAM) && !account.is_owned_by(&TOKEN_2022_PROGRAM) {
+    let extended = account.is_owned_by(&TOKEN_2022_PROGRAM);
+    if !account.is_owned_by(&TOKEN_PROGRAM) && !extended {
         return Err(PullError::InvalidTarget);
     }
     // SAFETY: the program never holds a mutable borrow of a token program's account.
     let data = unsafe { account.borrow_data_unchecked() };
-    if data.len() == base_len || (data.len() > 165 && data[165] == kind) {
+    let len = data.len();
+    if len == base_len || (extended && len > 165 && len != 355 && data[165] == kind) {
         return Ok(data);
     }
     Err(PullError::InvalidTarget)
@@ -123,15 +134,19 @@ pub fn allowance(account: &AccountInfo) -> Result<u64, PullError> {
     Ok(u64::from_le_bytes(data[121..129].try_into().unwrap()))
 }
 
-/// `TransferChecked`, signed by the engine PDA when `authority` is the engine
-/// (a pull, as delegate) and by the transaction otherwise (the spender paying
-/// the price). The instruction layout is shared by SPL Token and Token-2022.
+/// `TransferChecked` through token program `program`, which the caller has
+/// checked. `as_engine` signs as the engine PDA: only the pull itself, as the
+/// delegate. The transaction signs otherwise: the spender paying what the
+/// authority receives. The instruction layout is shared by SPL Token and
+/// Token-2022.
 pub fn transfer(
+    program: &Pubkey,
     from: &AccountInfo,
     mint: &AccountInfo,
     to: &AccountInfo,
     authority: &AccountInfo,
     amount: u64,
+    as_engine: bool,
 ) -> ProgramResult {
     let mut data = [12; 10];
     data[1..9].copy_from_slice(&amount.to_le_bytes());
@@ -139,14 +154,13 @@ pub fn transfer(
     let bump = [ENGINE_BUMP];
     let seeds = [Seed::from(ENGINE_SEED), Seed::from(&bump)];
     let engine = [Signer::from(&seeds)];
-    let signers: &[Signer] = match authority.key().eq(&ENGINE) {
+    let signers: &[Signer] = match as_engine {
         true => &engine,
         false => &[],
     };
     invoke_signed(
         &Instruction {
-            // SAFETY: `owner` is only read here, before any CPI changes it.
-            program_id: unsafe { from.owner() },
+            program_id: program,
             accounts: &[
                 AccountMeta::writable(from.key()),
                 AccountMeta::readonly(mint.key()),
@@ -160,24 +174,25 @@ pub fn transfer(
     )
 }
 
+/// Eight bytes nobody can know before this slot: the start of the newest
+/// slot hash. What a nonce index moves by, so nobody can have a signature
+/// ready for the next one.
 #[cfg(target_os = "solana")]
-pub fn sha256(bytes: &[u8]) -> [u8; 32] {
-    let mut out = [0; 32];
-    let parts = [bytes];
-    // SAFETY: `sol_sha256` reads an array of slices and writes exactly 32 bytes.
-    unsafe {
-        pinocchio::syscalls::sol_sha256(
-            parts.as_ptr() as *const u8,
-            parts.len() as u64,
-            out.as_mut_ptr(),
-        );
+pub fn entropy() -> Result<u64, ProgramError> {
+    let mut out = [0; 8];
+    // SlotHashes: a u64 count, then (slot: u64, hash) entries, newest first.
+    // SAFETY: `sol_get_sysvar` reads a 32-byte id and writes exactly 8 bytes.
+    let failed = unsafe {
+        pinocchio::syscalls::sol_get_sysvar(SLOT_HASHES.as_ptr(), out.as_mut_ptr(), 16, 8)
+    };
+    match failed {
+        0 => Ok(u64::from_le_bytes(out)),
+        _ => Err(ProgramError::UnsupportedSysvar),
     }
-    out
 }
 
 /// Host builds (unit tests, clippy) have no syscall to link against.
 #[cfg(not(target_os = "solana"))]
-pub fn sha256(bytes: &[u8]) -> [u8; 32] {
-    use sha2::Digest;
-    sha2::Sha256::digest(bytes).into()
+pub fn entropy() -> Result<u64, ProgramError> {
+    Ok(0)
 }

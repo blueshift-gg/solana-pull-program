@@ -1,21 +1,36 @@
 {
     "name": "@solana-pull/sdk",
     "version": "0.0.1",
-    "description": "The Pull program for @solana/kit: terms, instructions and accounts",
+    "description": "The Pull program for @solana/kit: the generated client, the journeys, the intent text and what a wallet shows",
     "license": "MIT",
     "private": true,
     "type": "module",
     "sideEffects": false,
-    "main": "./src/index.ts",
-    "types": "./src/index.ts",
     "scripts": {
-        "build": "wasm-pack build ../pull-wasm --target web --release --out-dir ../sdk/wasm --out-name pull --no-pack -- --features localnet",
-        "typecheck": "tsc --noEmit -p ."
-    },
-    "dependencies": {
-        "@solana/kit": "^8.4.0"
+        "generate": "node idl.mjs",
+        "test": "cargo run -q -p pull-tests --bin vectors > test/vectors.jsonl && node --test test/*.test.ts",
+        "e2e": "node e2e/run.ts",
+        "typecheck": "tsc --noEmit -p .",
+        "build": "tsc -p tsconfig.build.json"
     },
     "devDependencies": {
+        "@codama/renderers-js": "^2.5.0",
+        "@solana/kit": "^8.4.0",
+        "@types/node": "^26.6.4",
+        "codama": "^1.11.0",
         "typescript": "^5.9.0"
+    },
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "default": "./dist/index.js"
+        }
+    },
+    "files": [
+        "dist",
+        "idl.json"
+    ],
+    "peerDependencies": {
+        "@solana/kit": "^8.4.0"
     }
 }

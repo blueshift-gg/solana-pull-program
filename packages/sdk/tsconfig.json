@@ -7,7 +7,17 @@
         "noEmit": true,
         "skipLibCheck": true,
         "allowImportingTsExtensions": true,
-        "lib": ["ES2022", "DOM"]
+        "lib": [
+            "ES2022",
+            "DOM"
+        ],
+        "types": [
+            "node"
+        ]
     },
-    "include": ["src"]
+    "include": [
+        "src",
+        "test",
+        "e2e"
+    ]
 }

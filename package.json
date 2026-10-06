@@ -2,10 +2,13 @@
     "name": "solana-pull-program",
     "private": true,
     "type": "module",
-    "workspaces": ["packages/sdk", "packages/wallet-standard", "examples/subscriptions", "examples/agents"],
+    "workspaces": [
+        "packages/sdk",
+        "packages/wallet-standard"
+    ],
     "scripts": {
-        "dev": "node scripts/dev.mjs",
-        "dev:subscriptions": "node scripts/dev.mjs subscriptions",
-        "typecheck": "npm run typecheck --workspaces --if-present"
+        "typecheck": "npm run typecheck --workspaces --if-present",
+        "test": "npm test -w @solana-pull/sdk",
+        "e2e": "npm run e2e -w @solana-pull/sdk"
     }
 }

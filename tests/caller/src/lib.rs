@@ -18,7 +18,7 @@ no_allocator!();
 default_panic_handler!();
 
 /// A `Pull` without a price.
-const ACCOUNTS: usize = 8;
+const ACCOUNTS: usize = 9;
 
 fn process_instruction(_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
     if accounts.len() != ACCOUNTS {

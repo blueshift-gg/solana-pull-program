@@ -19,6 +19,8 @@ pub mod create;
 pub mod events;
 pub mod fill;
 pub mod helpers;
+pub mod invalidate;
+pub mod open;
 pub mod pull;
 pub mod state;
 
@@ -26,6 +28,8 @@ pub use cancel::Cancel;
 pub use close::Close;
 pub use create::Create;
 pub use fill::Fill;
+pub use invalidate::Invalidate;
+pub use open::Open;
 pub use pull::Pull;
 pub use pull_core::{constants, errors, ID};
 
@@ -39,6 +43,12 @@ fn process_instruction(
         Some((Pull::DISCRIMINATOR, data)) => Pull::try_from((data, accounts))?.process(),
         Some((Create::DISCRIMINATOR, data)) => Create::try_from((data, accounts))?.process(),
         Some((Close::DISCRIMINATOR, _)) => Close::try_from(accounts)?.process(),
+
+        // The profile: opened once, and what ends everything at once
+        Some((Open::DISCRIMINATOR, _)) => Open::try_from(accounts)?.process(),
+        Some((Invalidate::DISCRIMINATOR, data)) => {
+            Invalidate::try_from((data, accounts))?.process()
+        }
 
         // Intents: one signed action - Discriminators from 10
         Some((Fill::DISCRIMINATOR, data)) => Fill::try_from((data, accounts))?.process(),

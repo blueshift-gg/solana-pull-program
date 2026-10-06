@@ -1,6 +1,6 @@
 use crate::events::emit;
 use crate::helpers::{allowance, balance, transfer};
-use crate::state::policy;
+use crate::state::{policy, profile};
 use pinocchio::log::sol_log;
 use pinocchio::sysvars::{clock::Clock, Sysvar};
 use pinocchio::{account_info::AccountInfo, program_error::ProgramError, ProgramResult};
@@ -33,13 +33,17 @@ impl Legs<'_> {
         Ok(())
     }
 
-    /// The source and its mint are the ones the terms limit.
+    /// The source and its mint are the ones the terms limit, and the
+    /// destination is the one they name, if they name one.
     pub fn check_source(&self, limit: &Limit) -> ProgramResult {
         if limit.from.ne(self.from.key()) {
             return Err(PullError::InvalidPull.into());
         }
         if limit.mint.ne(self.mint.key()) {
             return Err(PullError::InvalidTarget.into());
+        }
+        if limit.to.is_some_and(|to| to.ne(self.to.key())) {
+            return Err(PullError::InvalidDestination.into());
         }
         Ok(())
     }
@@ -56,7 +60,17 @@ impl Legs<'_> {
         if held < amount {
             return Err(PullError::InsufficientFunds.into());
         }
-        transfer(self.from, self.mint, self.to, self.engine, amount)?;
+        // SAFETY: `owner` is only read, and `balance` checked it is a token program.
+        let program = unsafe { self.from.owner() };
+        transfer(
+            program,
+            self.from,
+            self.mint,
+            self.to,
+            self.engine,
+            amount,
+            true,
+        )?;
 
         let Some(receive) = terms.receive else {
             return Ok(0);
@@ -69,7 +83,19 @@ impl Legs<'_> {
         }
         let due = receive.due(now);
         let before = balance(pay_to, receive.mint, terms.authority)?;
-        transfer(pay_from, pay_mint, pay_to, self.spender, due)?;
+        // The payment goes through the token program of the account that
+        // receives it, which `balance` just checked, whatever `pay_from` is
+        // SAFETY: `owner` is only read.
+        let program = unsafe { pay_to.owner() };
+        transfer(
+            program,
+            pay_from,
+            pay_mint,
+            pay_to,
+            self.spender,
+            due,
+            false,
+        )?;
         let after = balance(pay_to, receive.mint, terms.authority)?;
         if after.checked_sub(before).is_none_or(|got| got < due) {
             return Err(PullError::NotReceived.into());
@@ -84,6 +110,7 @@ impl Legs<'_> {
 /// policy says what the authority receives, the spender pays it here, in the
 /// same instruction: there is nothing in between to trust. Callable by CPI.
 ///
+/// > Check the authority has not invalidated the policy
 /// > Check the window and the spender
 /// > Check the amount against what is left of the limit, and record it
 /// > Transfer from the source, as the engine delegate
@@ -92,20 +119,21 @@ impl Legs<'_> {
 /// Accounts:
 ///
 /// 1. spender:         [signer]
-/// 2. policy:         [mut]
-/// 3. from:            [mut]           the authority's token account
-/// 4. mint:                            its mint
-/// 5. to:              [mut]           where the spender sends the tokens
-/// 6. engine:                          SPL delegate and event signer
-/// 7. program:         [executable]    this program, for the event CPI
-/// 8. token_program:   [executable]    of `from`
+/// 2. policy:          [mut]
+/// 3. profile:                         the authority's
+/// 4. from:            [mut]           the authority's token account
+/// 5. mint:                            its mint
+/// 6. to:              [mut]           where the tokens go: the spender's choice, unless the terms name it
+/// 7. engine:                          SPL delegate and event signer
+/// 8. program:         [executable]    this program, for the event CPI
+/// 9. token_program:   [executable]    of `from`
 ///
 /// If the authority receives something, also:
 ///
-/// 9. pay_from:        [mut]           the spender's token account
-/// 10. pay_mint:                       the mint the authority receives
-/// 11. pay_to:         [mut]           the authority's token account the terms name
-/// 12. pay_program:    [executable]    token program of `pay_from`
+/// 10. pay_from:       [mut]           the spender's token account
+/// 11. pay_mint:                       the mint the authority receives
+/// 12. pay_to:         [mut]           the authority's token account the terms name
+/// 13. pay_program:    [executable]    token program of `pay_from`
 ///
 /// Parameters:
 /// 1. amount: u64,
@@ -115,6 +143,7 @@ impl Legs<'_> {
 /// Account Checks:
 /// - Spender: signer; the one the terms name, checked in process
 /// - Policy: writable, loaded in process
+/// - Profile: the authority's, checked in process
 /// - From, Mint, PayTo, PayMint: the accounts the terms name, checked in process
 /// - To, PayFrom, Engine, Program, token programs: no need to check since the CPIs fail otherwise
 ///
@@ -127,6 +156,7 @@ impl Legs<'_> {
 /// - reference: [u8; 32], (zeros when the pull gave none)
 pub struct Pull<'a> {
     pub policy: &'a AccountInfo,
+    pub profile: &'a AccountInfo,
     pub program: &'a AccountInfo,
     pub legs: Legs<'a>,
     pub amount: u64,
@@ -139,7 +169,7 @@ impl<'a> TryFrom<(&'a [u8], &'a [AccountInfo])> for Pull<'a> {
     fn try_from((data, accounts): (&'a [u8], &'a [AccountInfo])) -> Result<Self, Self::Error> {
         sol_log("Pull");
 
-        let [spender, policy, from, mint, to, engine, program, _token_program, payment @ ..] =
+        let [spender, policy, profile, from, mint, to, engine, program, _token_program, payment @ ..] =
             accounts
         else {
             return Err(ProgramError::NotEnoughAccountKeys);
@@ -161,6 +191,7 @@ impl<'a> TryFrom<(&'a [u8], &'a [AccountInfo])> for Pull<'a> {
 
         Ok(Self {
             policy,
+            profile,
             program,
             legs: Legs {
                 spender,
@@ -183,8 +214,15 @@ impl<'a> Pull<'a> {
         let now = Clock::get()?.unix_timestamp;
         let (legs, amount) = (&self.legs, self.amount);
 
+        // Two views never share an account
+        if self.policy.key().eq(self.profile.key()) {
+            return Err(PullError::InvalidProfile.into());
+        }
         let (policy, bytes) = policy(self.policy)?;
         let terms = Terms::decode(bytes)?;
+        if policy.index() <= profile(self.profile, terms.authority)?.stale() {
+            return Err(PullError::Stale.into());
+        }
         legs.check(&terms, now)?;
 
         // The amount must fit what is left of the limit

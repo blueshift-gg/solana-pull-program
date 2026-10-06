@@ -1,3 +1,4 @@
-export * from './accounts.ts';
-export * from './program.ts';
-export * from './terms.ts';
+export * from './generated/index.ts';
+export * from './client.ts';
+export * from './text.ts';
+export * from './wallet.ts';

@@ -15,7 +15,7 @@ pub enum PullError {
     InvalidTag,
     /// The account is not the PDA for its seeds
     InvalidSeeds,
-    /// The policy exists already
+    /// The profile exists already
     AlreadyInitialized,
 
     /// The terms bytes are not a canonical encoding
@@ -39,7 +39,8 @@ pub enum PullError {
     Expired,
     /// The signer is not the terms' spender
     InvalidSpender,
-    /// Only the authority or the spender may close a policy before it expires
+    /// A policy in force, or a page of nonces whose index is the profile's:
+    /// `Close` takes only what can never be used again
     NotClosable,
     /// The account is not the one that paid the rent being refunded
     InvalidPayer,
@@ -64,12 +65,22 @@ pub enum PullError {
     AllowanceExceeded,
     /// The account pulled from holds less than the pull
     InsufficientFunds,
+
+    /// The account is not the authority's profile, or the authority has none
+    InvalidProfile,
+    /// The authority invalidated this policy
+    Stale,
+    /// The tokens would not go to the account the terms name
+    InvalidDestination,
+    /// An intent anyone may fill for nothing in return runs for its whole
+    /// amount, or a stranger could use it up for less
+    InexactAmount,
 }
 
 impl PullError {
     /// Every error in code order, so clients can name a code: `ALL[code]`.
     /// A new variant goes here too; the test below checks the order.
-    pub const ALL: [PullError; 28] = [
+    pub const ALL: [PullError; 32] = [
         PullError::NotSigner,
         PullError::NotMutable,
         PullError::InvalidAccountOwner,
@@ -98,6 +109,10 @@ impl PullError {
         PullError::NotDelegate,
         PullError::AllowanceExceeded,
         PullError::InsufficientFunds,
+        PullError::InvalidProfile,
+        PullError::Stale,
+        PullError::InvalidDestination,
+        PullError::InexactAmount,
     ];
 }
 

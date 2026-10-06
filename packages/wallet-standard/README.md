@@ -1,5 +1,8 @@
 # `solana:signIntent`
 
+> A proposal for later. Today an intent is signed as a message a wallet already knows
+> how to sign, and a wallet recognises it with `describeIntent` from `@solana-pull/sdk`.
+
 The Wallet Standard feature a wallet implements to sign intents for the Pull program.
 It's written the way it would land in `@solana/wallet-standard-features`, following the
 shape of `solana:signOffchainMessage`, but it lives in this repo.
@@ -7,8 +10,9 @@ shape of `solana:signOffchainMessage`, but it lives in this repo.
 ## Summary
 
 Adds `solana:signIntent`. A dapp passes canonical terms, never text. The wallet decodes
-and validates them, reads mint decimals from its own RPC, renders the canonical text
-itself, shows it, and signs it as an Offchain Message v1.
+and validates them, reads mint decimals and the account's profile from its own RPC,
+renders the canonical text itself under the profile's nonce index, shows it, and signs
+it as an Offchain Message v1.
 
 The output type is `SolanaSignOffchainMessageOutput`, byte for byte. Verifiers and the
 on-chain program need nothing new.
@@ -37,14 +41,15 @@ Either way the spender fills the same intent, and the program enforces it the sa
 
 - Reject terms that don't decode as canonical, valid terms for the account's cluster.
 - Reject when `account` is not the terms' authority.
+- Reject when the account has no profile: an intent is signed under its nonce index.
 - Render with the canonical renderer (`pull-core`) and sign
   `"\xffsolana offchain" ‖ 0x01 ‖ 0x01 ‖ authority ‖ text`.
-- Show the `SPENDER`, every `MAY TAKE` line and the `MUST RECEIVE` line.
+- Show the `SPENDER`, the `MAY TAKE` line and the `MUST RECEIVE` line.
 - For terms that are valid `until revoked`, ask for a separate, explicit confirmation:
-  the intent stays usable until it is filled or cancelled.
+  the intent stays usable until it is filled, cancelled or invalidated.
 
-The enabling `Approve`, and a policy's `Create` and `Close`, are ordinary transactions, so
-they need no feature.
+The enabling `Approve`, `Open`, `Invalidate`, and a policy's `Create` and `Close` are
+ordinary transactions, so they need no feature.
 
 ```sh
 npm install && npm run typecheck
