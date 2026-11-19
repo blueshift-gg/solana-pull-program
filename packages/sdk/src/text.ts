@@ -1,4 +1,4 @@
-// The intent text: what an authority reads and signs, and the validity rules
+// The authorization text: what an authority reads and signs, and the validity rules
 // of terms. This is the same text and the same rules as the program's
 // (`pull-core`), checked line for line against it by `npm test`.
 import { type Address, getAddressEncoder, type Option } from '@solana/kit';
@@ -45,11 +45,11 @@ function duration(seconds: number): string {
 }
 
 /**
- * The text of an intent: `terms` signed under the authority's `nonceIndex`
+ * The text of an authorization: `terms` signed under the authority's `nonceIndex`
  * (its profile's). `decimals` gives the decimals of each mint the terms name.
  * Throws on terms the program would refuse.
  */
-export function renderIntent(terms: Terms, nonceIndex: bigint, decimals: Record<string, number>): string {
+export function renderAuthorization(terms: Terms, nonceIndex: bigint, decimals: Record<string, number>): string {
     if (!isValid(terms)) throw new Error('these terms are not valid');
     const of = (mint: Address) => {
         if (decimals[mint] === undefined) throw new Error(`decimals of mint ${mint} are missing`);
@@ -98,14 +98,14 @@ const option = <T>(value: T | undefined): Option<T> => (value === undefined ? { 
 const UNITS = { d: 86_400, h: 3_600, m: 60, s: 1 };
 
 /**
- * Read an intent text back into what it says: how a wallet recognises one in
+ * Read an authorization text back into what it says: how a wallet recognises one in
  * a message it is asked to sign, and shows it as an approval. Returns null
- * for any text that is not exactly what `renderIntent` writes for valid
+ * for any text that is not exactly what `renderAuthorization` writes for valid
  * terms, so one text means one thing. `decimals` are the ones the text
  * shows; a wallet compares them with each mint's own before it trusts the
  * amounts.
  */
-export function parseIntent(text: string): { terms: Terms; nonceIndex: bigint; decimals: Record<string, number> } | null {
+export function parseAuthorization(text: string): { terms: Terms; nonceIndex: bigint; decimals: Record<string, number> } | null {
     const m = TEXT.exec(text);
     if (!m) return null;
     const [, cluster, engine, authority, spender, max, mint, from, to, every, min, payMint, payTo, decayMin, t0, t1, notBefore, notAfter, index, salt] = m;
@@ -127,14 +127,14 @@ export function parseIntent(text: string): { terms: Terms; nonceIndex: bigint; d
         const decimals = { [mint]: places(max), ...(min === undefined ? {} : { [payMint]: places(min) }) };
         const nonceIndex = BigInt(index);
         // Only the canonical text counts: the one the program itself would render
-        return renderIntent(terms, nonceIndex, decimals) === text ? { decimals, nonceIndex, terms } : null;
+        return renderAuthorization(terms, nonceIndex, decimals) === text ? { decimals, nonceIndex, terms } : null;
     } catch {
         return null;
     }
 }
 
 /**
- * The exact bytes the authority signs for an intent, and the program
+ * The exact bytes the authority signs for an authorization, and the program
  * verifies. Wallets do not agree on one way to sign a message, so there are
  * two, and `Fill` is told which with the same `Envelope`:
  *
@@ -142,10 +142,10 @@ export function parseIntent(text: string): { terms: Terms; nonceIndex: bigint; d
  *   `solana:signMessage`; every wallet with software keys signs them.
  * - `Envelope.OffchainMessage`: the text in an Offchain Message v1 with the
  *   authority as its one signer. A wallet with `solana:signOffchainMessage`
- *   builds the same bytes from `renderIntent`'s text and returns them.
+ *   builds the same bytes from `renderAuthorization`'s text and returns them.
  */
-export function intentMessage(terms: Terms, nonceIndex: bigint, decimals: Record<string, number>, envelope: Envelope): Uint8Array {
-    const text = new TextEncoder().encode(renderIntent(terms, nonceIndex, decimals));
+export function authorizationMessage(terms: Terms, nonceIndex: bigint, decimals: Record<string, number>, envelope: Envelope): Uint8Array {
+    const text = new TextEncoder().encode(renderAuthorization(terms, nonceIndex, decimals));
     if (envelope === Envelope.Text) return text;
     return Uint8Array.from([0xff, ...new TextEncoder().encode('solana offchain'), 1, 1, ...getAddressEncoder().encode(terms.authority), ...text]);
 }

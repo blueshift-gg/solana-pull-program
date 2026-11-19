@@ -59,7 +59,7 @@ export type CreateInstruction<
   TAccountAuthority extends string | AccountMeta<string> = string,
   TAccountPayer extends string | AccountMeta<string> = string,
   TAccountProfile extends string | AccountMeta<string> = string,
-  TAccountPolicy extends string | AccountMeta<string> = string,
+  TAccountMandate extends string | AccountMeta<string> = string,
   TAccountSystemProgram extends string | AccountMeta<string> =
     "11111111111111111111111111111111",
   TAccountEngine extends string | AccountMeta<string> =
@@ -82,9 +82,9 @@ export type CreateInstruction<
       TAccountProfile extends string
         ? WritableAccount<TAccountProfile>
         : TAccountProfile,
-      TAccountPolicy extends string
-        ? WritableAccount<TAccountPolicy>
-        : TAccountPolicy,
+      TAccountMandate extends string
+        ? WritableAccount<TAccountMandate>
+        : TAccountMandate,
       TAccountSystemProgram extends string
         ? ReadonlyAccount<TAccountSystemProgram>
         : TAccountSystemProgram,
@@ -133,7 +133,7 @@ export type CreateAsyncInput<
   TAccountAuthority extends InstructionSignerInput = InstructionSignerInput,
   TAccountPayer extends InstructionSignerInput = InstructionSignerInput,
   TAccountProfile extends InstructionAccountInput = InstructionAccountInput,
-  TAccountPolicy extends InstructionAccountInput = InstructionAccountInput,
+  TAccountMandate extends InstructionAccountInput = InstructionAccountInput,
   TAccountSystemProgram extends InstructionAccountInput =
     InstructionAccountInput,
   TAccountEngine extends InstructionAccountInput = InstructionAccountInput,
@@ -143,7 +143,7 @@ export type CreateAsyncInput<
   /** Funds the rent; it goes back there. */
   payer: TAccountPayer;
   profile?: TAccountProfile;
-  policy: TAccountPolicy;
+  mandate: TAccountMandate;
   systemProgram?: TAccountSystemProgram;
   engine?: TAccountEngine;
   program?: TAccountProgram;
@@ -154,7 +154,7 @@ export async function getCreateInstructionAsync<
   TAccountAuthority extends InstructionSignerInput,
   TAccountPayer extends InstructionSignerInput,
   TAccountProfile extends InstructionAccountInput,
-  TAccountPolicy extends InstructionAccountInput,
+  TAccountMandate extends InstructionAccountInput,
   TAccountSystemProgram extends InstructionAccountInput,
   TAccountEngine extends InstructionAccountInput,
   TAccountProgram extends InstructionAccountInput,
@@ -164,7 +164,7 @@ export async function getCreateInstructionAsync<
     TAccountAuthority,
     TAccountPayer,
     TAccountProfile,
-    TAccountPolicy,
+    TAccountMandate,
     TAccountSystemProgram,
     TAccountEngine,
     TAccountProgram
@@ -186,8 +186,8 @@ export async function getCreateInstructionAsync<
       InstructionAccountInputAddress<TAccountProfile>
     >,
     ResolvedInstructionAccountMeta<
-      TAccountPolicy,
-      InstructionAccountInputAddress<TAccountPolicy>
+      TAccountMandate,
+      InstructionAccountInputAddress<TAccountMandate>
     >,
     ResolvedInstructionAccountMeta<
       TAccountSystemProgram,
@@ -222,7 +222,11 @@ export async function getCreateInstructionAsync<
       isSigner: false,
       isWritable: true,
     },
-    policy: { value: input.policy ?? null, isSigner: false, isWritable: true },
+    mandate: {
+      value: input.mandate ?? null,
+      isSigner: false,
+      isWritable: true,
+    },
     systemProgram: {
       value: input.systemProgram ?? null,
       isSigner: false,
@@ -273,7 +277,7 @@ export async function getCreateInstructionAsync<
       getAccountMeta("authority", accounts.authority),
       getAccountMeta("payer", accounts.payer),
       getAccountMeta("profile", accounts.profile),
-      getAccountMeta("policy", accounts.policy),
+      getAccountMeta("mandate", accounts.mandate),
       getAccountMeta("systemProgram", accounts.systemProgram),
       getAccountMeta("engine", accounts.engine),
       getAccountMeta("program", accounts.program),
@@ -297,8 +301,8 @@ export async function getCreateInstructionAsync<
       InstructionAccountInputAddress<TAccountProfile>
     >,
     ResolvedInstructionAccountMeta<
-      TAccountPolicy,
-      InstructionAccountInputAddress<TAccountPolicy>
+      TAccountMandate,
+      InstructionAccountInputAddress<TAccountMandate>
     >,
     ResolvedInstructionAccountMeta<
       TAccountSystemProgram,
@@ -319,7 +323,7 @@ export type CreateInput<
   TAccountAuthority extends InstructionSignerInput = InstructionSignerInput,
   TAccountPayer extends InstructionSignerInput = InstructionSignerInput,
   TAccountProfile extends InstructionAccountInput = InstructionAccountInput,
-  TAccountPolicy extends InstructionAccountInput = InstructionAccountInput,
+  TAccountMandate extends InstructionAccountInput = InstructionAccountInput,
   TAccountSystemProgram extends InstructionAccountInput =
     InstructionAccountInput,
   TAccountEngine extends InstructionAccountInput = InstructionAccountInput,
@@ -329,7 +333,7 @@ export type CreateInput<
   /** Funds the rent; it goes back there. */
   payer: TAccountPayer;
   profile: TAccountProfile;
-  policy: TAccountPolicy;
+  mandate: TAccountMandate;
   systemProgram?: TAccountSystemProgram;
   engine?: TAccountEngine;
   program?: TAccountProgram;
@@ -340,7 +344,7 @@ export function getCreateInstruction<
   TAccountAuthority extends InstructionSignerInput,
   TAccountPayer extends InstructionSignerInput,
   TAccountProfile extends InstructionAccountInput,
-  TAccountPolicy extends InstructionAccountInput,
+  TAccountMandate extends InstructionAccountInput,
   TAccountSystemProgram extends InstructionAccountInput,
   TAccountEngine extends InstructionAccountInput,
   TAccountProgram extends InstructionAccountInput,
@@ -350,7 +354,7 @@ export function getCreateInstruction<
     TAccountAuthority,
     TAccountPayer,
     TAccountProfile,
-    TAccountPolicy,
+    TAccountMandate,
     TAccountSystemProgram,
     TAccountEngine,
     TAccountProgram
@@ -371,8 +375,8 @@ export function getCreateInstruction<
     InstructionAccountInputAddress<TAccountProfile>
   >,
   ResolvedInstructionAccountMeta<
-    TAccountPolicy,
-    InstructionAccountInputAddress<TAccountPolicy>
+    TAccountMandate,
+    InstructionAccountInputAddress<TAccountMandate>
   >,
   ResolvedInstructionAccountMeta<
     TAccountSystemProgram,
@@ -406,7 +410,11 @@ export function getCreateInstruction<
       isSigner: false,
       isWritable: true,
     },
-    policy: { value: input.policy ?? null, isSigner: false, isWritable: true },
+    mandate: {
+      value: input.mandate ?? null,
+      isSigner: false,
+      isWritable: true,
+    },
     systemProgram: {
       value: input.systemProgram ?? null,
       isSigner: false,
@@ -446,7 +454,7 @@ export function getCreateInstruction<
       getAccountMeta("authority", accounts.authority),
       getAccountMeta("payer", accounts.payer),
       getAccountMeta("profile", accounts.profile),
-      getAccountMeta("policy", accounts.policy),
+      getAccountMeta("mandate", accounts.mandate),
       getAccountMeta("systemProgram", accounts.systemProgram),
       getAccountMeta("engine", accounts.engine),
       getAccountMeta("program", accounts.program),
@@ -470,8 +478,8 @@ export function getCreateInstruction<
       InstructionAccountInputAddress<TAccountProfile>
     >,
     ResolvedInstructionAccountMeta<
-      TAccountPolicy,
-      InstructionAccountInputAddress<TAccountPolicy>
+      TAccountMandate,
+      InstructionAccountInputAddress<TAccountMandate>
     >,
     ResolvedInstructionAccountMeta<
       TAccountSystemProgram,
@@ -498,7 +506,7 @@ export type ParsedCreateInstruction<
     /** Funds the rent; it goes back there. */
     payer: TAccountMetas[1];
     profile: TAccountMetas[2];
-    policy: TAccountMetas[3];
+    mandate: TAccountMetas[3];
     systemProgram: TAccountMetas[4];
     engine: TAccountMetas[5];
     program: TAccountMetas[6];
@@ -535,7 +543,7 @@ export function parseCreateInstruction<
       authority: getNextAccount(),
       payer: getNextAccount(),
       profile: getNextAccount(),
-      policy: getNextAccount(),
+      mandate: getNextAccount(),
       systemProgram: getNextAccount(),
       engine: getNextAccount(),
       program: getNextAccount(),

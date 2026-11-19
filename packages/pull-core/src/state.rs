@@ -39,16 +39,17 @@ macro_rules! account {
     };
 }
 
-/// An authority's profile. Its policies are numbered from 1 as they are
-/// created; every policy numbered `stale` or less is invalid. An intent is
-/// signed over `nonce_index`, so changing it invalidates every intent signed
+/// An authority's profile. Its mandates are numbered from 1 as they are
+/// created; `mandates` is the last number used, and every mandate numbered
+/// `stale` or less is invalid. An authorization is
+/// signed over `nonce_index`, so changing it invalidates every authorization signed
 /// before. It is never closed: a profile opened again would count from zero
-/// and bring old policies back.
+/// and bring old mandates back.
 #[repr(C)]
 pub struct Profile {
     tag: [u8; 1],
     pub authority: Pubkey,
-    policies: [u8; 8],
+    mandates: [u8; 8],
     stale: [u8; 8],
     nonce_index: [u8; 8],
 }
@@ -57,28 +58,28 @@ account!(Profile);
 
 impl Profile {
     field!(tag, set_tag, u8);
-    field!(policies, set_policies, u64);
+    field!(mandates, set_mandates, u64);
     field!(stale, set_stale, u64);
     field!(nonce_index, set_nonce_index, u64);
 }
 
-/// A policy: this header, then the canonical terms.
+/// A mandate: this header, then the canonical terms.
 #[repr(C)]
-pub struct Policy {
+pub struct Mandate {
     tag: [u8; 1],
     /// When `consumed` was last written.
     rolled: [u8; 8],
     consumed: [u8; 8],
     /// Paid the rent; refunded by `Close`.
     pub payer: Pubkey,
-    /// Its number among the authority's policies.
+    /// Its number among the authority's mandates.
     index: [u8; 8],
     terms_len: [u8; 2],
 }
 
-account!(Policy);
+account!(Mandate);
 
-impl Policy {
+impl Mandate {
     field!(tag, set_tag, u8);
     field!(rolled, set_rolled, i64);
     field!(consumed, set_consumed, u64);
@@ -101,8 +102,8 @@ impl Policy {
     }
 }
 
-/// One page of the nonces an authority's signed intents have used or
-/// cancelled: one bit each, so intents run in any order. It closes once the
+/// One page of the nonces an authority's signed authorizations have used or
+/// cancelled: one bit each, so authorizations run in any order. It closes once the
 /// profile's nonce index has moved on from its own.
 #[repr(C)]
 pub struct Nonces {
@@ -135,7 +136,7 @@ impl Nonces {
 }
 
 const _: () = {
-    assert!(core::mem::size_of::<Policy>() == POLICY_LEN);
+    assert!(core::mem::size_of::<Mandate>() == MANDATE_LEN);
     assert!(core::mem::size_of::<Nonces>() == NONCES_LEN);
     assert!(core::mem::size_of::<Profile>() == PROFILE_LEN);
 };

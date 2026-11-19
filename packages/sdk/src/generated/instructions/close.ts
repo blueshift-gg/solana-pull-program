@@ -117,7 +117,7 @@ export type CloseInput<
   TAccountProgram extends InstructionAccountInput = InstructionAccountInput,
 > = {
   closer: TAccountCloser;
-  /** A policy that expired or was invalidated, or a page of nonces under an old nonce index. */
+  /** A mandate that expired or was invalidated, or a page of nonces under an old nonce index. */
   account: TAccountAccount;
   /** The recorded payer; receives the rent. */
   payer: TAccountPayer;
@@ -260,7 +260,7 @@ export type ParsedCloseInstruction<
   programAddress: Address<TProgram>;
   accounts: {
     closer: TAccountMetas[0];
-    /** A policy that expired or was invalidated, or a page of nonces under an old nonce index. */
+    /** A mandate that expired or was invalidated, or a page of nonces under an old nonce index. */
     account: TAccountMetas[1];
     /** The recorded payer; receives the rent. */
     payer: TAccountMetas[2];

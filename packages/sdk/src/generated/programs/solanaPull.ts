@@ -33,13 +33,13 @@ import {
   type SelfPlanAndSendFunctions,
 } from "@solana/kit/program-client-core";
 import {
+  getMandateCodec,
   getNoncesCodec,
-  getPolicyCodec,
   getProfileCodec,
+  type Mandate,
+  type MandateArgs,
   type Nonces,
   type NoncesArgs,
-  type Policy,
-  type PolicyArgs,
   type Profile,
   type ProfileArgs,
 } from "../accounts/index.ts";
@@ -75,8 +75,8 @@ import {
 } from "../instructions/index.ts";
 import {
   findEnginePda,
+  findMandatePda,
   findNoncesPda,
-  findPolicyPda,
   findProfilePda,
 } from "../pdas/index.ts";
 
@@ -84,10 +84,10 @@ export const SOLANA_PULL_PROGRAM_ADDRESS =
   "PULLrgDYqK1yFKVTSbWieX3ARP7U2XUyrjxWXqKgVzA" as Address<"PULLrgDYqK1yFKVTSbWieX3ARP7U2XUyrjxWXqKgVzA">;
 
 export const SolanaPullAccount = {
-  0: "Policy",
+  0: "Mandate",
   1: "Nonces",
   2: "Profile",
-  Policy: 0,
+  Mandate: 0,
   Nonces: 1,
   Profile: 2,
 } as const;
@@ -102,7 +102,7 @@ export function identifySolanaPullAccount(
 ): SolanaPullAccount {
   const data = "data" in account ? account.data : account;
   if (containsBytes(data, getU8Encoder().encode(1), 0)) {
-    return SolanaPullAccount.Policy;
+    return SolanaPullAccount.Mandate;
   }
   if (containsBytes(data, getU8Encoder().encode(2), 0)) {
     return SolanaPullAccount.Nonces;
@@ -321,8 +321,8 @@ export type SolanaPullPlugin = {
 };
 
 export type SolanaPullPluginAccounts = {
-  policy: ReturnType<typeof getPolicyCodec> &
-    SelfFetchFunctions<PolicyArgs, Policy>;
+  mandate: ReturnType<typeof getMandateCodec> &
+    SelfFetchFunctions<MandateArgs, Mandate>;
   nonces: ReturnType<typeof getNoncesCodec> &
     SelfFetchFunctions<NoncesArgs, Nonces>;
   profile: ReturnType<typeof getProfileCodec> &
@@ -357,7 +357,7 @@ export type SolanaPullPluginInstructions = {
 export type SolanaPullPluginPdas = {
   engine: typeof findEnginePda;
   profile: typeof findProfilePda;
-  policy: typeof findPolicyPda;
+  mandate: typeof findMandatePda;
   nonces: typeof findNoncesPda;
 };
 
@@ -374,7 +374,7 @@ export function solanaPullProgram() {
     return extendClient(client, {
       solanaPull: {
         accounts: {
-          policy: addSelfFetchFunctions(client, getPolicyCodec()),
+          mandate: addSelfFetchFunctions(client, getMandateCodec()),
           nonces: addSelfFetchFunctions(client, getNoncesCodec()),
           profile: addSelfFetchFunctions(client, getProfileCodec()),
         },
@@ -406,7 +406,7 @@ export function solanaPullProgram() {
         pdas: {
           engine: findEnginePda,
           profile: findProfilePda,
-          policy: findPolicyPda,
+          mandate: findMandatePda,
           nonces: findNoncesPda,
         },
         identifyAccount: identifySolanaPullAccount,

@@ -1,6 +1,6 @@
 use crate::events::emit;
 use crate::helpers::{allowance, balance, transfer};
-use crate::state::{policy, profile};
+use crate::state::{mandate, profile};
 use pinocchio::log::sol_log;
 use pinocchio::sysvars::{clock::Clock, Sysvar};
 use pinocchio::{account_info::AccountInfo, program_error::ProgramError, ProgramResult};
@@ -106,11 +106,11 @@ impl Legs<'_> {
 
 /// # Pull
 ///
-/// Take tokens under a policy, within its limit. If the
-/// policy says what the authority receives, the spender pays it here, in the
+/// Take tokens under a mandate, within its limit. If the
+/// mandate says what the authority receives, the spender pays it here, in the
 /// same instruction: there is nothing in between to trust. Callable by CPI.
 ///
-/// > Check the authority has not invalidated the policy
+/// > Check the authority has not invalidated the mandate
 /// > Check the window and the spender
 /// > Check the amount against what is left of the limit, and record it
 /// > Transfer from the source, as the engine delegate
@@ -119,7 +119,7 @@ impl Legs<'_> {
 /// Accounts:
 ///
 /// 1. spender:         [signer]
-/// 2. policy:          [mut]
+/// 2. mandate:         [mut]
 /// 3. profile:                         the authority's
 /// 4. from:            [mut]           the authority's token account
 /// 5. mint:                            its mint
@@ -142,20 +142,20 @@ impl Legs<'_> {
 ///
 /// Account Checks:
 /// - Spender: signer; the one the terms name, checked in process
-/// - Policy: writable, loaded in process
+/// - Mandate: writable, loaded in process
 /// - Profile: the authority's, checked in process
 /// - From, Mint, PayTo, PayMint: the accounts the terms name, checked in process
 /// - To, PayFrom, Engine, Program, token programs: no need to check since the CPIs fail otherwise
 ///
 /// Event Data:
 /// - discriminator: u8, (255u8, 1u8)
-/// - policy: Pubkey,
+/// - mandate: Pubkey,
 /// - spender: Pubkey,
 /// - amount: u64,
 /// - paid: u64,
 /// - reference: [u8; 32], (zeros when the pull gave none)
 pub struct Pull<'a> {
-    pub policy: &'a AccountInfo,
+    pub mandate: &'a AccountInfo,
     pub profile: &'a AccountInfo,
     pub program: &'a AccountInfo,
     pub legs: Legs<'a>,
@@ -169,7 +169,7 @@ impl<'a> TryFrom<(&'a [u8], &'a [AccountInfo])> for Pull<'a> {
     fn try_from((data, accounts): (&'a [u8], &'a [AccountInfo])) -> Result<Self, Self::Error> {
         sol_log("Pull");
 
-        let [spender, policy, profile, from, mint, to, engine, program, _token_program, payment @ ..] =
+        let [spender, mandate, profile, from, mint, to, engine, program, _token_program, payment @ ..] =
             accounts
         else {
             return Err(ProgramError::NotEnoughAccountKeys);
@@ -179,7 +179,7 @@ impl<'a> TryFrom<(&'a [u8], &'a [AccountInfo])> for Pull<'a> {
         if !spender.is_signer() {
             return Err(PullError::NotSigner.into());
         }
-        if !policy.is_writable() {
+        if !mandate.is_writable() {
             return Err(PullError::NotMutable.into());
         }
 
@@ -190,7 +190,7 @@ impl<'a> TryFrom<(&'a [u8], &'a [AccountInfo])> for Pull<'a> {
         };
 
         Ok(Self {
-            policy,
+            mandate,
             profile,
             program,
             legs: Legs {
@@ -215,12 +215,12 @@ impl<'a> Pull<'a> {
         let (legs, amount) = (&self.legs, self.amount);
 
         // Two views never share an account
-        if self.policy.key().eq(self.profile.key()) {
+        if self.mandate.key().eq(self.profile.key()) {
             return Err(PullError::InvalidProfile.into());
         }
-        let (policy, bytes) = policy(self.policy)?;
+        let (mandate, bytes) = mandate(self.mandate)?;
         let terms = Terms::decode(bytes)?;
-        if policy.index() <= profile(self.profile, terms.authority)?.stale() {
+        if mandate.index() <= profile(self.profile, terms.authority)?.stale() {
             return Err(PullError::Stale.into());
         }
         legs.check(&terms, now)?;
@@ -228,13 +228,13 @@ impl<'a> Pull<'a> {
         // The amount must fit what is left of the limit
         let limit = terms.limit;
         legs.check_source(&limit)?;
-        let spent = policy.spent(limit.per, terms.not_before, now);
+        let spent = mandate.spent(limit.per, terms.not_before, now);
         let spent = spent.checked_add(amount).ok_or(PullError::Overflow)?;
         if spent > limit.max {
             return Err(PullError::LimitExceeded.into());
         }
-        policy.set_consumed(spent);
-        policy.set_rolled(now);
+        mandate.set_consumed(spent);
+        mandate.set_rolled(now);
 
         let paid = legs.settle(&terms, amount, now)?;
 
@@ -244,7 +244,7 @@ impl<'a> Pull<'a> {
             self.program,
             *Self::DISCRIMINATOR,
             &[
-                self.policy.key(),
+                self.mandate.key(),
                 legs.spender.key(),
                 &amount.to_le_bytes(),
                 &paid.to_le_bytes(),

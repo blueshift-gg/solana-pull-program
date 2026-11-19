@@ -46,11 +46,11 @@ export function getNoncesTagBytes(): ReadonlyUint8Array {
   return getU8Encoder().encode(NONCES_TAG);
 }
 
-/** One page of the nonces an authority's signed intents have used or cancelled. */
+/** One page of the nonces an authority's signed authorizations have used or cancelled. */
 export type Nonces = {
   tag: number;
   authority: Address;
-  /** The nonce index its intents were signed under. */
+  /** The nonce index its authorizations were signed under. */
   index: bigint;
   page: bigint;
   /** Paid the rent; it goes back there. */
@@ -60,7 +60,7 @@ export type Nonces = {
 
 export type NoncesArgs = {
   authority: Address;
-  /** The nonce index its intents were signed under. */
+  /** The nonce index its authorizations were signed under. */
   index: number | bigint;
   page: number | bigint;
   /** Paid the rent; it goes back there. */

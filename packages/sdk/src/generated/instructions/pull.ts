@@ -58,7 +58,7 @@ export function getPullDiscriminatorBytes(): ReadonlyUint8Array {
 export type PullInstruction<
   TProgram extends string = typeof SOLANA_PULL_PROGRAM_ADDRESS,
   TAccountSpender extends string | AccountMeta<string> = string,
-  TAccountPolicy extends string | AccountMeta<string> = string,
+  TAccountMandate extends string | AccountMeta<string> = string,
   TAccountProfile extends string | AccountMeta<string> = string,
   TAccountFrom extends string | AccountMeta<string> = string,
   TAccountMint extends string | AccountMeta<string> = string,
@@ -83,9 +83,9 @@ export type PullInstruction<
         ? ReadonlySignerAccount<TAccountSpender> &
             AccountSignerMeta<TAccountSpender>
         : TAccountSpender,
-      TAccountPolicy extends string
-        ? WritableAccount<TAccountPolicy>
-        : TAccountPolicy,
+      TAccountMandate extends string
+        ? WritableAccount<TAccountMandate>
+        : TAccountMandate,
       TAccountProfile extends string
         ? ReadonlyAccount<TAccountProfile>
         : TAccountProfile,
@@ -189,7 +189,7 @@ export function getPullInstructionDataCodec(): Codec<
 
 export type PullInput<
   TAccountSpender extends InstructionSignerInput = InstructionSignerInput,
-  TAccountPolicy extends InstructionAccountInput = InstructionAccountInput,
+  TAccountMandate extends InstructionAccountInput = InstructionAccountInput,
   TAccountProfile extends InstructionAccountInput = InstructionAccountInput,
   TAccountFrom extends InstructionAccountInput = InstructionAccountInput,
   TAccountMint extends InstructionAccountInput = InstructionAccountInput,
@@ -204,7 +204,7 @@ export type PullInput<
   TAccountPayProgram extends InstructionAccountInput = InstructionAccountInput,
 > = {
   spender: TAccountSpender;
-  policy: TAccountPolicy;
+  mandate: TAccountMandate;
   profile: TAccountProfile;
   /** The authority's token account. */
   from: TAccountFrom;
@@ -225,7 +225,7 @@ export type PullInput<
 
 export function getPullInstruction<
   TAccountSpender extends InstructionSignerInput,
-  TAccountPolicy extends InstructionAccountInput,
+  TAccountMandate extends InstructionAccountInput,
   TAccountProfile extends InstructionAccountInput,
   TAccountFrom extends InstructionAccountInput,
   TAccountMint extends InstructionAccountInput,
@@ -241,7 +241,7 @@ export function getPullInstruction<
 >(
   input: PullInput<
     TAccountSpender,
-    TAccountPolicy,
+    TAccountMandate,
     TAccountProfile,
     TAccountFrom,
     TAccountMint,
@@ -262,8 +262,8 @@ export function getPullInstruction<
     InstructionAccountInputAddress<TAccountSpender>
   >,
   ResolvedInstructionAccountMeta<
-    TAccountPolicy,
-    InstructionAccountInputAddress<TAccountPolicy>
+    TAccountMandate,
+    InstructionAccountInputAddress<TAccountMandate>
   >,
   ResolvedInstructionAccountMeta<
     TAccountProfile,
@@ -323,7 +323,11 @@ export function getPullInstruction<
       isSigner: true,
       isWritable: false,
     },
-    policy: { value: input.policy ?? null, isSigner: false, isWritable: true },
+    mandate: {
+      value: input.mandate ?? null,
+      isSigner: false,
+      isWritable: true,
+    },
     profile: {
       value: input.profile ?? null,
       isSigner: false,
@@ -385,7 +389,7 @@ export function getPullInstruction<
   return Object.freeze({
     accounts: [
       getAccountMeta("spender", accounts.spender),
-      getAccountMeta("policy", accounts.policy),
+      getAccountMeta("mandate", accounts.mandate),
       getAccountMeta("profile", accounts.profile),
       getAccountMeta("from", accounts.from),
       getAccountMeta("mint", accounts.mint),
@@ -409,8 +413,8 @@ export function getPullInstruction<
       InstructionAccountInputAddress<TAccountSpender>
     >,
     ResolvedInstructionAccountMeta<
-      TAccountPolicy,
-      InstructionAccountInputAddress<TAccountPolicy>
+      TAccountMandate,
+      InstructionAccountInputAddress<TAccountMandate>
     >,
     ResolvedInstructionAccountMeta<
       TAccountProfile,
@@ -466,7 +470,7 @@ export type ParsedPullInstruction<
   programAddress: Address<TProgram>;
   accounts: {
     spender: TAccountMetas[0];
-    policy: TAccountMetas[1];
+    mandate: TAccountMetas[1];
     profile: TAccountMetas[2];
     /** The authority's token account. */
     from: TAccountMetas[3];
@@ -518,7 +522,7 @@ export function parsePullInstruction<
     programAddress: instruction.programAddress,
     accounts: {
       spender: getNextAccount(),
-      policy: getNextAccount(),
+      mandate: getNextAccount(),
       profile: getNextAccount(),
       from: getNextAccount(),
       mint: getNextAccount(),

@@ -51,7 +51,7 @@ impl Envelope {
     }
 }
 
-/// Render `terms` as an intent signed under the profile's nonce `index`.
+/// Render `terms` as an authorization signed under the profile's nonce `index`.
 /// `decimals` resolves a mint's on-chain decimals.
 pub fn render(
     terms: &Terms,

@@ -7,12 +7,13 @@ use pull_core::errors::PullError;
 
 /// # Invalidate
 ///
-/// End everything of one kind at once: every policy the authority created so
-/// far, every intent it signed so far, or both. What it ends can then be
+/// End everything of one kind at once: every mandate the authority created so
+/// far, every authorization it signed so far, or both. What it ends can then be
 /// closed by anyone, and its rent goes back to whoever paid it.
 ///
-/// > Policies: mark every number handed out so far as stale
-/// > Intents: move the nonce index by an amount nobody could know before
+/// > Mandates: mark every number handed out so far as stale, and one more,
+/// > so a `Create` signed earlier and held back cannot land after
+/// > Authorizations: move the nonce index by an amount nobody could know before
 ///
 /// Accounts:
 ///
@@ -22,7 +23,7 @@ use pull_core::errors::PullError;
 /// 4. program:         [executable]    this program, for the event CPI
 ///
 /// Parameters:
-/// 1. what: u8,        // 1 for policies, 2 for intents, 3 for both
+/// 1. what: u8,        // 1 for mandates, 2 for authorizations, 3 for both
 ///
 /// Account Checks:
 /// - Authority: signer
@@ -39,8 +40,8 @@ pub struct Invalidate<'a> {
     pub profile: &'a AccountInfo,
     pub engine: &'a AccountInfo,
     pub program: &'a AccountInfo,
-    pub policies: bool,
-    pub intents: bool,
+    pub mandates: bool,
+    pub authorizations: bool,
 }
 
 impl<'a> TryFrom<(&'a [u8], &'a [AccountInfo])> for Invalidate<'a> {
@@ -70,8 +71,8 @@ impl<'a> TryFrom<(&'a [u8], &'a [AccountInfo])> for Invalidate<'a> {
             profile,
             engine,
             program,
-            policies: what & 1 != 0,
-            intents: what & 2 != 0,
+            mandates: what & 1 != 0,
+            authorizations: what & 2 != 0,
         })
     }
 }
@@ -83,10 +84,18 @@ impl<'a> Invalidate<'a> {
         let authority = self.authority.key();
 
         let profile = profile(self.profile, authority)?;
-        if self.policies {
-            profile.set_stale(profile.policies());
+        if self.mandates {
+            // One number is used up and never given to a mandate. A `Create`
+            // signed before this and held back names the address of that
+            // number, so it can no longer land
+            let burned = profile
+                .mandates()
+                .checked_add(1)
+                .ok_or(PullError::Overflow)?;
+            profile.set_mandates(burned);
+            profile.set_stale(burned);
         }
-        if self.intents {
+        if self.authorizations {
             // Never by zero, and never by an amount known ahead: a signature
             // made for a later index cannot be waiting
             let step = entropy()? | 1;

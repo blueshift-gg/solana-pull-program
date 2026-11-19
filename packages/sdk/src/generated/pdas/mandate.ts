@@ -15,13 +15,13 @@ import {
   type ProgramDerivedAddress,
 } from "@solana/kit";
 
-export type PolicySeeds = {
+export type MandateSeeds = {
   authority: Address;
   index: number | bigint;
 };
 
-export async function findPolicyPda(
-  seeds: PolicySeeds,
+export async function findMandatePda(
+  seeds: MandateSeeds,
   config: { programAddress?: Address | undefined } = {},
 ): Promise<ProgramDerivedAddress> {
   const {
@@ -30,7 +30,7 @@ export async function findPolicyPda(
   return await getProgramDerivedAddress({
     programAddress,
     seeds: [
-      getUtf8Encoder().encode("policy"),
+      getUtf8Encoder().encode("mandate"),
       getAddressEncoder().encode(seeds.authority),
       getU64Encoder().encode(seeds.index),
     ],

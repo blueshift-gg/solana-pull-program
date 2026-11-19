@@ -4,7 +4,7 @@
 
 use crate::helpers::{check_pda, create_pda};
 use pinocchio::{account_info::AccountInfo, program_error::ProgramError};
-pub use pull_core::state::{Nonces, Policy, Profile};
+pub use pull_core::state::{Mandate, Nonces, Profile};
 use pull_core::{constants::*, errors::PullError};
 
 /// The account's bytes, after checking its owner, length and tag.
@@ -24,12 +24,12 @@ fn bytes(account: &AccountInfo, len: usize, tag: u8) -> Result<&mut [u8], Progra
     Ok(data)
 }
 
-/// A policy's header and the canonical terms after it.
+/// A mandate's header and the canonical terms after it.
 #[allow(clippy::mut_from_ref)]
-pub fn policy(account: &AccountInfo) -> Result<(&mut Policy, &[u8]), ProgramError> {
-    let (header, rest) = bytes(account, POLICY_LEN, POLICY_TAG)?.split_at_mut(POLICY_LEN);
+pub fn mandate(account: &AccountInfo) -> Result<(&mut Mandate, &[u8]), ProgramError> {
+    let (header, rest) = bytes(account, MANDATE_LEN, MANDATE_TAG)?.split_at_mut(MANDATE_LEN);
     // SAFETY: `header` holds exactly the layout; all fields have alignment 1.
-    let header = unsafe { Policy::from_bytes_unchecked_mut(header) };
+    let header = unsafe { Mandate::from_bytes_unchecked_mut(header) };
     let terms = rest
         .get(..header.terms_len() as usize)
         .ok_or(PullError::InvalidAccountLength)?;
@@ -59,8 +59,8 @@ pub fn profile<'a>(
     Ok(profile)
 }
 
-/// The page that holds the nonce of an intent of `authority` with this salt,
-/// under nonce index `index`, created with rent from `payer` if the intent
+/// The page that holds the nonce of an authorization of `authority` with this salt,
+/// under nonce index `index`, created with rent from `payer` if the authorization
 /// is its first.
 #[allow(clippy::mut_from_ref)]
 pub fn nonces_for<'a>(

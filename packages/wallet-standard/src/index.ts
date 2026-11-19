@@ -1,1 +1,1 @@
-export * from './signIntent.js';
+export * from './signAuthorization.js';

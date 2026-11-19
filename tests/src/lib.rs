@@ -139,14 +139,14 @@ impl Fixture {
     }
 
     /// The one-time setup for a token: approve the engine as delegate. `cap`
-    /// is the budget every policy on this account shares; `u64::MAX` for none.
+    /// is the budget every mandate on this account shares; `u64::MAX` for none.
     pub fn enable(&mut self, wallet: &Wallet, account: &Address, cap: u64) {
         Approve::new(&mut self.svm, &wallet.key, &ENGINE_KEY, account, cap)
             .send()
             .unwrap();
     }
 
-    /// What the engine may still pull from `account`, across every policy.
+    /// What the engine may still pull from `account`, across every mandate.
     pub fn allowance(&self, account: &Address) -> u64 {
         get_spl_account::<spl_token::state::Account>(&self.svm, account)
             .unwrap()
@@ -159,14 +159,14 @@ impl Fixture {
             .amount
     }
 
-    /// The profile of `authority`: `(policies, stale, nonce_index)`.
+    /// The profile of `authority`: `(mandates, stale, nonce_index)`.
     pub fn profile(&self, authority: &Address) -> (u64, u64, u64) {
         let data = self.svm.get_account(&profile_pda(authority)).unwrap().data;
         let field = |at: usize| u64::from_le_bytes(data[at..at + 8].try_into().unwrap());
         (field(33), field(41), field(49))
     }
 
-    /// What an intent of `authority` is signed under now.
+    /// What an authorization of `authority` is signed under now.
     pub fn nonce_index(&self, authority: &Address) -> u64 {
         self.profile(authority).2
     }
@@ -209,7 +209,7 @@ pub fn encode(terms: &Terms) -> Vec<u8> {
     bytes
 }
 
-/// The canonical text a wallet shows for an intent signed under nonce `index`.
+/// The canonical text a wallet shows for an authorization signed under nonce `index`.
 pub fn text(
     terms: &Terms,
     index: u64,
@@ -231,7 +231,7 @@ pub fn sign(
     sign_as(Envelope::OffchainMessage, terms, index, key, decimals)
 }
 
-/// What a wallet signs for an intent, with or without an envelope.
+/// What a wallet signs for an authorization, with or without an envelope.
 pub fn sign_as(
     envelope: Envelope,
     terms: &Terms,
@@ -281,7 +281,7 @@ pub fn profile_pda(authority: &Address) -> Address {
     pda(&[PROFILE_SEED, authority.as_ref()])
 }
 
-/// Create the profile of `authority`: once, before its first policy or intent.
+/// Create the profile of `authority`: once, before its first mandate or authorization.
 pub fn open(authority: &Address, payer: &Address) -> Instruction {
     Instruction {
         program_id: PROGRAM,
@@ -297,10 +297,10 @@ pub fn open(authority: &Address, payer: &Address) -> Instruction {
     }
 }
 
-pub const POLICIES: u8 = 1;
-pub const INTENTS: u8 = 2;
+pub const MANDATES: u8 = 1;
+pub const AUTHORIZATIONS: u8 = 2;
 
-/// End every policy of `authority` so far, every intent, or both.
+/// End every mandate of `authority` so far, every authorization, or both.
 pub fn invalidate(authority: &Address, what: u8) -> Instruction {
     Instruction {
         program_id: PROGRAM,
@@ -314,12 +314,12 @@ pub fn invalidate(authority: &Address, what: u8) -> Instruction {
     }
 }
 
-/// The `index`-th policy of `authority`, counted from 1.
-pub fn policy_pda(authority: &Address, index: u64) -> Address {
-    pda(&[POLICY_SEED, authority.as_ref(), &index.to_le_bytes()])
+/// The `index`-th mandate of `authority`, counted from 1.
+pub fn mandate_pda(authority: &Address, index: u64) -> Address {
+    pda(&[MANDATE_SEED, authority.as_ref(), &index.to_le_bytes()])
 }
 
-/// Put a policy on chain as the authority's `index`-th: the authority signs,
+/// Put a mandate on chain as the authority's `index`-th: the authority signs,
 /// `payer` funds the rent.
 pub fn create(authority: &Address, payer: &Address, index: u64, bytes: &[u8]) -> Instruction {
     Instruction {
@@ -328,7 +328,7 @@ pub fn create(authority: &Address, payer: &Address, index: u64, bytes: &[u8]) ->
             AccountMeta::new_readonly(*authority, true),
             AccountMeta::new(*payer, true),
             AccountMeta::new(profile_pda(authority), false),
-            AccountMeta::new(policy_pda(authority, index), false),
+            AccountMeta::new(mandate_pda(authority, index), false),
             AccountMeta::new_readonly(SYSTEM, false),
             AccountMeta::new_readonly(ENGINE_KEY, false),
             AccountMeta::new_readonly(PROGRAM, false),
@@ -361,7 +361,7 @@ fn legs((from, mint, to): Take, payment: Option<Pay>, token_program: Address) ->
     accounts
 }
 
-/// `spender` takes `amount` under the `index`-th policy of `authority`,
+/// `spender` takes `amount` under the `index`-th mandate of `authority`,
 /// paying what the authority receives if the terms say so.
 pub fn pull(
     spender: &Address,
@@ -398,7 +398,7 @@ pub fn pull_for(
 ) -> Instruction {
     let mut accounts = vec![
         AccountMeta::new_readonly(*spender, true),
-        AccountMeta::new(policy_pda(authority, index), false),
+        AccountMeta::new(mandate_pda(authority, index), false),
         AccountMeta::new_readonly(profile_pda(authority), false),
     ];
     accounts.extend(legs(take, payment, token_program));
@@ -409,14 +409,14 @@ pub fn pull_for(
     }
 }
 
-/// The page that holds the nonce of an intent of `authority` with this salt,
+/// The page that holds the nonce of an authorization of `authority` with this salt,
 /// signed under nonce `index`.
 pub fn nonces_pda(authority: &Address, index: u64, salt: u64) -> Address {
     let page = (salt / NONCE_BITS as u64).to_le_bytes();
     pda(&[NONCES_SEED, authority.as_ref(), &index.to_le_bytes(), &page])
 }
 
-/// `spender` runs an intent signed under nonce `index` once, taking `amount`.
+/// `spender` runs an authorization signed under nonce `index` once, taking `amount`.
 /// It pays for the page of nonces. The signature is over an Offchain Message
 /// v1, as `sign` makes it.
 pub fn fill(
@@ -451,7 +451,7 @@ pub fn fill(
     }
 }
 
-/// The authority uses up the nonce of one intent signed under nonce `index`.
+/// The authority uses up the nonce of one authorization signed under nonce `index`.
 pub fn cancel(authority: &Address, index: u64, salt: u64) -> Instruction {
     Instruction {
         program_id: PROGRAM,
@@ -468,15 +468,15 @@ pub fn cancel(authority: &Address, index: u64, salt: u64) -> Instruction {
     }
 }
 
-/// The authority ends one policy; its rent goes to `payer`, the account that paid it.
-pub fn cancel_policy(authority: &Address, policy: &Address, payer: &Address) -> Instruction {
+/// The authority ends one mandate; its rent goes to `payer`, the account that paid it.
+pub fn cancel_mandate(authority: &Address, mandate: &Address, payer: &Address) -> Instruction {
     Instruction {
         program_id: PROGRAM,
         accounts: vec![
             AccountMeta::new_readonly(*authority, true),
             AccountMeta::new(*payer, false),
             AccountMeta::new_readonly(profile_pda(authority), false),
-            AccountMeta::new(*policy, false),
+            AccountMeta::new(*mandate, false),
             AccountMeta::new_readonly(SYSTEM, false),
             AccountMeta::new_readonly(ENGINE_KEY, false),
             AccountMeta::new_readonly(PROGRAM, false),
@@ -485,7 +485,7 @@ pub fn cancel_policy(authority: &Address, policy: &Address, payer: &Address) -> 
     }
 }
 
-/// Anyone closes a policy or a page of nonces of `authority` that can never
+/// Anyone closes a mandate or a page of nonces of `authority` that can never
 /// be used again; its rent goes to `payer`, the account that paid it.
 pub fn close(
     closer: &Address,

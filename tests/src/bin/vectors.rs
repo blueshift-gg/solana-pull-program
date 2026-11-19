@@ -3,7 +3,7 @@
 //! that is what keeps its codec, its validity rules and its text the same as
 //! the program's.
 //!
-//! `bytes` and `text` are hex. `text` is the intent text under `index` with
+//! `bytes` and `text` are hex. `text` is the authorization text under `index` with
 //! the two `decimals` (of the limit's mint, of the received mint); it is
 //! absent when the terms are not valid.
 

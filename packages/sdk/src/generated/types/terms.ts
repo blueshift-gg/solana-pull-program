@@ -39,7 +39,7 @@ import {
   type ReceiveArgs,
 } from "./index.ts";
 
-/** What an authority permits: the same for a policy and for a signed intent. */
+/** What an authority permits: the same for a mandate and for a signed authorization. */
 export type Terms = {
   version: number;
   /** 0 mainnet, 1 devnet, 2 testnet, 3 localnet: the cluster the program was built for. */
@@ -49,7 +49,7 @@ export type Terms = {
   spender: Option<Address>;
   notBefore: bigint;
   notAfter: Option<bigint>;
-  /** A signed intent's nonce. A policy does not use it. */
+  /** A signed authorization's nonce. A mandate does not use it. */
   salt: bigint;
   limit: Limit;
   receive: Option<Receive>;
@@ -63,7 +63,7 @@ export type TermsArgs = {
   spender: OptionOrNullable<Address>;
   notBefore: number | bigint;
   notAfter: OptionOrNullable<number | bigint>;
-  /** A signed intent's nonce. A policy does not use it. */
+  /** A signed authorization's nonce. A mandate does not use it. */
   salt: number | bigint;
   limit: LimitArgs;
   receive: OptionOrNullable<ReceiveArgs>;

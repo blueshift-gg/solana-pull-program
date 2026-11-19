@@ -12,7 +12,7 @@ type Result<T> = core::result::Result<T, PullError>;
 /// What the limit counts over.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Per {
-    /// The life of a policy; the one use of an intent.
+    /// The life of a mandate; the one use of an authorization.
     Total,
     /// Fixed windows of `seconds`, counted from `not_before`. Nothing carries over.
     Every(u32),
@@ -58,7 +58,7 @@ pub struct Terms<'a> {
     pub spender: Option<&'a Pubkey>,
     pub not_before: i64,
     pub not_after: Option<i64>,
-    /// Tells apart otherwise identical terms. For an intent it is the nonce.
+    /// Tells apart otherwise identical terms. For an authorization it is the nonce.
     pub salt: u64,
     pub limit: Limit<'a>,
     pub receive: Option<Receive<'a>>,

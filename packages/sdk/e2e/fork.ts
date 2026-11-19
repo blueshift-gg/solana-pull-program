@@ -18,11 +18,12 @@ import {
     pipe,
     setTransactionMessageFeePayerSigner,
     setTransactionMessageLifetimeUsingBlockhash,
+    signBytes,
     signTransactionMessageWithSigners,
     type TransactionSigner,
 } from '@solana/kit';
 
-import { getSolanaPullErrorMessage, parseEvents, SOLANA_PULL_PROGRAM_ADDRESS, type SolanaPullError } from '../src/index.ts';
+import { getSolanaPullErrorMessage, parseEvents, reviewAuthorization, SOLANA_PULL_PROGRAM_ADDRESS, type SolanaPullError } from '../src/index.ts';
 
 const RPC_URL = 'http://127.0.0.1:8899';
 export const USDC = address('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
@@ -103,4 +104,38 @@ export function check(ok: unknown, what: string) {
 export async function refused(sending: ReturnType<typeof send>, error: SolanaPullError, what: string) {
     const result = (await sending) as { code?: number; error?: string };
     check(result.code === error, `${what}: refused${result.code === error ? '' : ` — but ${result.error ?? 'it went through'}`}`);
+}
+
+/**
+ * The signer as a Wallet Standard wallet that signs messages the way real
+ * ones do: `message` signs the bytes it is given (`solana:signMessage`, all
+ * a wallet without the newer feature has); `offchain` also builds an
+ * Offchain Message v1 from the text itself (`solana:signOffchainMessage`).
+ * Each shows the owner what `reviewAuthorization` says, and refuses on a problem.
+ */
+export function walletOf(signer: KeyPairSigner, kind: 'message' | 'offchain', shown: string[] = []) {
+    const account = { address: signer.address, publicKey: getAddressEncoder().encode(signer.address) };
+    const sign = async (bytes: Uint8Array, text: string) => {
+        const review = await reviewAuthorization(rpc, text, signer.address, TOKENS);
+        if (review?.problems.length) throw new Error(review.problems.join(' '));
+        if (review) shown.push(...review.rows.map(([label, value]) => `${label}: ${value}`));
+        return new Uint8Array(await signBytes(signer.keyPair.privateKey, bytes));
+    };
+    const features = {
+        'solana:signMessage': {
+            signMessage: async ({ message }: { message: Uint8Array }) => [{ signature: await sign(message, new TextDecoder().decode(message)), signedMessage: message }],
+        },
+        ...(kind === 'offchain'
+            ? {
+                  'solana:signOffchainMessage': {
+                      signOffchainMessage: async ({ message }: { message: string }) => {
+                          const signedOffchainMessage = Uint8Array.from([0xff, ...new TextEncoder().encode('solana offchain'), 1, 1, ...account.publicKey, ...new TextEncoder().encode(message)]);
+                          return [{ signature: await sign(signedOffchainMessage, message), signedOffchainMessage }];
+                      },
+                      supportedMessageVersions: [1],
+                  },
+              }
+            : {}),
+    };
+    return { account, wallet: { features } };
 }

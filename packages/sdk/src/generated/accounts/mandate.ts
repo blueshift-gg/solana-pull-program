@@ -40,7 +40,7 @@ import {
   type MaybeEncodedAccount,
   type ReadonlyUint8Array,
 } from "@solana/kit";
-import { findPolicyPda, type PolicySeeds } from "../pdas/index.ts";
+import { findMandatePda, type MandateSeeds } from "../pdas/index.ts";
 import {
   getTermsDecoder,
   getTermsEncoder,
@@ -48,38 +48,38 @@ import {
   type TermsArgs,
 } from "../types/index.ts";
 
-export const POLICY_TAG = 1;
+export const MANDATE_TAG = 1;
 
-export function getPolicyTagBytes(): ReadonlyUint8Array {
-  return getU8Encoder().encode(POLICY_TAG);
+export function getMandateTagBytes(): ReadonlyUint8Array {
+  return getU8Encoder().encode(MANDATE_TAG);
 }
 
 /** A standing permission on chain: this header, then its terms. */
-export type Policy = {
+export type Mandate = {
   tag: number;
   /** When `consumed` was last written. */
   rolled: bigint;
   consumed: bigint;
   /** Paid the rent; it goes back there. */
   payer: Address;
-  /** Its number among the authority's policies. */
+  /** Its number among the authority's mandates. */
   index: bigint;
   terms: Terms;
 };
 
-export type PolicyArgs = {
+export type MandateArgs = {
   /** When `consumed` was last written. */
   rolled: number | bigint;
   consumed: number | bigint;
   /** Paid the rent; it goes back there. */
   payer: Address;
-  /** Its number among the authority's policies. */
+  /** Its number among the authority's mandates. */
   index: number | bigint;
   terms: TermsArgs;
 };
 
-/** Gets the encoder for {@link PolicyArgs} account data. */
-export function getPolicyEncoder(): Encoder<PolicyArgs> {
+/** Gets the encoder for {@link MandateArgs} account data. */
+export function getMandateEncoder(): Encoder<MandateArgs> {
   return transformEncoder(
     getStructEncoder([
       ["tag", getU8Encoder()],
@@ -89,12 +89,12 @@ export function getPolicyEncoder(): Encoder<PolicyArgs> {
       ["index", getU64Encoder()],
       ["terms", addEncoderSizePrefix(getTermsEncoder(), getU16Encoder())],
     ]),
-    (value) => ({ ...value, tag: POLICY_TAG }),
+    (value) => ({ ...value, tag: MANDATE_TAG }),
   );
 }
 
-/** Gets the decoder for {@link Policy} account data. */
-export function getPolicyDecoder(): Decoder<Policy> {
+/** Gets the decoder for {@link Mandate} account data. */
+export function getMandateDecoder(): Decoder<Mandate> {
   return getStructDecoder([
     ["tag", getU8Decoder()],
     ["rolled", getI64Decoder()],
@@ -105,80 +105,80 @@ export function getPolicyDecoder(): Decoder<Policy> {
   ]);
 }
 
-/** Gets the codec for {@link Policy} account data. */
-export function getPolicyCodec(): Codec<PolicyArgs, Policy> {
-  return combineCodec(getPolicyEncoder(), getPolicyDecoder());
+/** Gets the codec for {@link Mandate} account data. */
+export function getMandateCodec(): Codec<MandateArgs, Mandate> {
+  return combineCodec(getMandateEncoder(), getMandateDecoder());
 }
 
-export function decodePolicy<TAddress extends string = string>(
+export function decodeMandate<TAddress extends string = string>(
   encodedAccount: EncodedAccount<TAddress>,
-): Account<Policy, TAddress>;
-export function decodePolicy<TAddress extends string = string>(
+): Account<Mandate, TAddress>;
+export function decodeMandate<TAddress extends string = string>(
   encodedAccount: MaybeEncodedAccount<TAddress>,
-): MaybeAccount<Policy, TAddress>;
-export function decodePolicy<TAddress extends string = string>(
+): MaybeAccount<Mandate, TAddress>;
+export function decodeMandate<TAddress extends string = string>(
   encodedAccount: EncodedAccount<TAddress> | MaybeEncodedAccount<TAddress>,
-): Account<Policy, TAddress> | MaybeAccount<Policy, TAddress> {
+): Account<Mandate, TAddress> | MaybeAccount<Mandate, TAddress> {
   return decodeAccount(
     encodedAccount as MaybeEncodedAccount<TAddress>,
-    getPolicyDecoder(),
+    getMandateDecoder(),
   );
 }
 
-export async function fetchPolicy<TAddress extends string = string>(
+export async function fetchMandate<TAddress extends string = string>(
   rpc: Parameters<typeof fetchEncodedAccount>[0],
   address: Address<TAddress>,
   config?: FetchAccountConfig,
-): Promise<Account<Policy, TAddress>> {
-  const maybeAccount = await fetchMaybePolicy(rpc, address, config);
+): Promise<Account<Mandate, TAddress>> {
+  const maybeAccount = await fetchMaybeMandate(rpc, address, config);
   assertAccountExists(maybeAccount);
   return maybeAccount;
 }
 
-export async function fetchMaybePolicy<TAddress extends string = string>(
+export async function fetchMaybeMandate<TAddress extends string = string>(
   rpc: Parameters<typeof fetchEncodedAccount>[0],
   address: Address<TAddress>,
   config?: FetchAccountConfig,
-): Promise<MaybeAccount<Policy, TAddress>> {
+): Promise<MaybeAccount<Mandate, TAddress>> {
   const maybeAccount = await fetchEncodedAccount(rpc, address, config);
-  return decodePolicy(maybeAccount);
+  return decodeMandate(maybeAccount);
 }
 
-export async function fetchAllPolicy(
+export async function fetchAllMandate(
   rpc: Parameters<typeof fetchEncodedAccounts>[0],
   addresses: Array<Address>,
   config?: FetchAccountsConfig,
-): Promise<Account<Policy>[]> {
-  const maybeAccounts = await fetchAllMaybePolicy(rpc, addresses, config);
+): Promise<Account<Mandate>[]> {
+  const maybeAccounts = await fetchAllMaybeMandate(rpc, addresses, config);
   assertAccountsExist(maybeAccounts);
   return maybeAccounts;
 }
 
-export async function fetchAllMaybePolicy(
+export async function fetchAllMaybeMandate(
   rpc: Parameters<typeof fetchEncodedAccounts>[0],
   addresses: Array<Address>,
   config?: FetchAccountsConfig,
-): Promise<MaybeAccount<Policy>[]> {
+): Promise<MaybeAccount<Mandate>[]> {
   const maybeAccounts = await fetchEncodedAccounts(rpc, addresses, config);
-  return maybeAccounts.map((maybeAccount) => decodePolicy(maybeAccount));
+  return maybeAccounts.map((maybeAccount) => decodeMandate(maybeAccount));
 }
 
-export async function fetchPolicyFromSeeds(
+export async function fetchMandateFromSeeds(
   rpc: Parameters<typeof fetchEncodedAccount>[0],
-  seeds: PolicySeeds,
+  seeds: MandateSeeds,
   config: FetchAccountConfig & { programAddress?: Address } = {},
-): Promise<Account<Policy>> {
-  const maybeAccount = await fetchMaybePolicyFromSeeds(rpc, seeds, config);
+): Promise<Account<Mandate>> {
+  const maybeAccount = await fetchMaybeMandateFromSeeds(rpc, seeds, config);
   assertAccountExists(maybeAccount);
   return maybeAccount;
 }
 
-export async function fetchMaybePolicyFromSeeds(
+export async function fetchMaybeMandateFromSeeds(
   rpc: Parameters<typeof fetchEncodedAccount>[0],
-  seeds: PolicySeeds,
+  seeds: MandateSeeds,
   config: FetchAccountConfig & { programAddress?: Address } = {},
-): Promise<MaybeAccount<Policy>> {
+): Promise<MaybeAccount<Mandate>> {
   const { programAddress, ...fetchConfig } = config;
-  const [address] = await findPolicyPda(seeds, { programAddress });
-  return await fetchMaybePolicy(rpc, address, fetchConfig);
+  const [address] = await findMandatePda(seeds, { programAddress });
+  return await fetchMaybeMandate(rpc, address, fetchConfig);
 }

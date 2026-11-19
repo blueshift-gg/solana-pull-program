@@ -30,23 +30,23 @@ pub const ENGINE_SEED: &[u8] = b"engine";
 pub const ENGINE: Pubkey = decode_32_const("58eSE1WJDvzrwz7BZ23sbsDiqa75pxetzkyRyUcPwb6E");
 pub const ENGINE_BUMP: u8 = 255;
 /// Profile PDA: [PROFILE_SEED, authority]. One per authority: it numbers the
-/// authority's policies and holds what invalidates them and its intents.
+/// authority's mandates and holds what invalidates them and its authorizations.
 pub const PROFILE_SEED: &[u8] = b"profile";
-/// Policy PDA: [POLICY_SEED, authority, index], `index` little-endian: the
-/// authority's policies are numbered 1, 2, 3, ... by its profile.
-pub const POLICY_SEED: &[u8] = b"policy";
+/// Mandate PDA: [MANDATE_SEED, authority, index], `index` little-endian: the
+/// authority's mandates are numbered 1, 2, 3, ... by its profile.
+pub const MANDATE_SEED: &[u8] = b"mandate";
 
-/// The used nonces of an authority's signed intents: [NONCES_SEED, authority,
-/// nonce_index, page], both little-endian. An intent's nonce is its salt: the
+/// The used nonces of an authority's signed authorizations: [NONCES_SEED, authority,
+/// nonce_index, page], both little-endian. An authorization's nonce is its salt: the
 /// page is `salt / NONCE_BITS` and the bit is the remainder. A page lives as
 /// long as its nonce index is the profile's, so a used nonce stays used for
-/// as long as the intent could verify.
+/// as long as the authorization could verify.
 pub const NONCES_SEED: &[u8] = b"nonces";
 /// Nonces in one page.
 pub const NONCE_BITS: usize = 1024;
 
 /// Account tags: the first byte of every account, one per type.
-pub const POLICY_TAG: u8 = 1;
+pub const MANDATE_TAG: u8 = 1;
 pub const NONCES_TAG: u8 = 2;
 pub const PROFILE_TAG: u8 = 3;
 
@@ -54,6 +54,6 @@ pub const PROFILE_TAG: u8 = 3;
 pub const EVENT_DISCRIMINATOR: u8 = 255;
 
 /// Fixed header; the canonical terms follow it.
-pub const POLICY_LEN: usize = 1 + 8 + 8 + 32 + 8 + 2; // 59
+pub const MANDATE_LEN: usize = 1 + 8 + 8 + 32 + 8 + 2; // 59
 pub const NONCES_LEN: usize = 1 + 32 + 8 + 8 + 32 + NONCE_BITS / 8; // 209
 pub const PROFILE_LEN: usize = 1 + 32 + 8 + 8 + 8; // 57

@@ -107,7 +107,7 @@ fn a_program_collects_a_subscription_by_cpi() {
 }
 
 #[test]
-fn a_signed_intent_runs_once_and_costs_its_signer_nothing() {
+fn a_signed_authorization_runs_once_and_costs_its_signer_nothing() {
     let mut f = Fixture::new();
     let user = f.wallet(100 * USDC, 0);
     let (payee, stranger) = (f.wallet(0, 0), f.wallet(0, 0));
@@ -123,20 +123,36 @@ fn a_signed_intent_runs_once_and_costs_its_signer_nothing() {
     let index = f.nonce_index(&owner);
 
     // Signed off chain: the payee may take up to 10 USDC, once, with no expiry
-    let mut intent = terms(&u, Some(&p), None, limits, None);
-    let signature = sign(&intent, index, &user.key, f.decimals());
+    let mut authorization = terms(&u, Some(&p), None, limits, None);
+    let signature = sign(&authorization, index, &user.key, f.decimals());
     let before = f.svm.get_balance(&owner).unwrap();
 
     // Nobody else can run it, and not for more than it says
     let elsewhere = (user.usdc, f.usdc, stranger.usdc);
     let thief = stranger.address();
-    let theft = fill(&thief, &intent, index, &signature, elsewhere, USDC, None);
+    let theft = fill(
+        &thief,
+        &authorization,
+        index,
+        &signature,
+        elsewhere,
+        USDC,
+        None,
+    );
     assert!(refused(
         f.send(&[theft], &[&stranger.key]),
         PullError::InvalidSpender
     ));
     let over = 10 * USDC + 1;
-    let ix = fill(&spender, &intent, index, &signature, take, over, None);
+    let ix = fill(
+        &spender,
+        &authorization,
+        index,
+        &signature,
+        take,
+        over,
+        None,
+    );
     assert!(refused(
         f.send(&[ix], &[&payee.key]),
         PullError::LimitExceeded
@@ -144,28 +160,52 @@ fn a_signed_intent_runs_once_and_costs_its_signer_nothing() {
 
     // A year later the payee lands it, taking 6. That was its one use
     f.set_time(NOW + 365 * DAY);
-    let ix = fill(&spender, &intent, index, &signature, take, 6 * USDC, None);
+    let ix = fill(
+        &spender,
+        &authorization,
+        index,
+        &signature,
+        take,
+        6 * USDC,
+        None,
+    );
     f.send(std::slice::from_ref(&ix), &[&payee.key]).unwrap();
     assert!(refused(f.send(&[ix], &[&payee.key]), PullError::NonceUsed));
     assert_eq!(f.balance(&payee.usdc), 6 * USDC);
     assert_eq!(f.svm.get_balance(&owner).unwrap(), before);
 
     // Every salt has its own bit: salt 1024 is bit 0 of the next page, and runs
-    intent.salt = NONCE_BITS as u64;
-    let signature = sign(&intent, index, &user.key, f.decimals());
-    let ix = fill(&spender, &intent, index, &signature, take, USDC, None);
+    authorization.salt = NONCE_BITS as u64;
+    let signature = sign(&authorization, index, &user.key, f.decimals());
+    let ix = fill(
+        &spender,
+        &authorization,
+        index,
+        &signature,
+        take,
+        USDC,
+        None,
+    );
     f.send(&[ix], &[&payee.key]).unwrap();
 
-    // The owner cancels one intent before anyone runs it
-    intent.salt = 1;
-    let signature = sign(&intent, index, &user.key, f.decimals());
+    // The owner cancels one authorization before anyone runs it
+    authorization.salt = 1;
+    let signature = sign(&authorization, index, &user.key, f.decimals());
     f.send(&[cancel(&owner, index, 1)], &[&user.key]).unwrap();
-    let ix = fill(&spender, &intent, index, &signature, take, USDC, None);
+    let ix = fill(
+        &spender,
+        &authorization,
+        index,
+        &signature,
+        take,
+        USDC,
+        None,
+    );
     assert!(refused(f.send(&[ix], &[&payee.key]), PullError::NonceUsed));
 }
 
 #[test]
-fn the_owner_ends_every_intent_at_once_and_the_pages_close() {
+fn the_owner_ends_every_authorization_at_once_and_the_pages_close() {
     let mut f = Fixture::new();
     let user = f.wallet(100 * USDC, 0);
     let (payee, stranger) = (f.wallet(0, 0), f.payer());
@@ -180,16 +220,24 @@ fn the_owner_ends_every_intent_at_once_and_the_pages_close() {
     let take = (user.usdc, f.usdc, payee.usdc);
     let old = f.nonce_index(&owner);
 
-    // Three intents are out; one has run, so its page exists, paid by the payee
-    let mut intent = terms(&u, Some(&p), None, limits, None);
+    // Three authorizations are out; one has run, so its page exists, paid by the payee
+    let mut authorization = terms(&u, Some(&p), None, limits, None);
     let signatures: Vec<_> = (0..3)
         .map(|salt| {
-            intent.salt = salt;
-            sign(&intent, old, &user.key, f.decimals())
+            authorization.salt = salt;
+            sign(&authorization, old, &user.key, f.decimals())
         })
         .collect();
-    intent.salt = 0;
-    let ix = fill(&spender, &intent, old, &signatures[0], take, USDC, None);
+    authorization.salt = 0;
+    let ix = fill(
+        &spender,
+        &authorization,
+        old,
+        &signatures[0],
+        take,
+        USDC,
+        None,
+    );
     f.send(&[ix], &[&payee.key]).unwrap();
     let page = nonces_pda(&owner, old, 0);
 
@@ -197,19 +245,19 @@ fn the_owner_ends_every_intent_at_once_and_the_pages_close() {
     let ix = close(&stranger.pubkey(), &page, &spender, &owner);
     assert!(refused(f.send(&[ix], &[&stranger]), PullError::NotClosable));
 
-    // One transaction ends every intent signed so far. The index moves by an
+    // One transaction ends every authorization signed so far. The index moves by an
     // amount nobody could know, so no signature can be waiting for the next
-    f.send(&[invalidate(&owner, INTENTS)], &[&user.key])
+    f.send(&[invalidate(&owner, AUTHORIZATIONS)], &[&user.key])
         .unwrap();
     let new = f.nonce_index(&owner);
     assert!(new != old && new != old.wrapping_add(1));
     for salt in 0..3 {
-        intent.salt = salt;
+        authorization.salt = salt;
         let signature = &signatures[salt as usize];
         // The text it signed is no longer the text the program renders,
         // whichever page the spender brings
         for index in [old, new] {
-            let ix = fill(&spender, &intent, index, signature, take, USDC, None);
+            let ix = fill(&spender, &authorization, index, signature, take, USDC, None);
             assert!(refused(
                 f.send(&[ix], &[&payee.key]),
                 PullError::InvalidSignature
@@ -230,16 +278,16 @@ fn the_owner_ends_every_intent_at_once_and_the_pages_close() {
     assert!(f.svm.get_account(&page).is_none_or(|a| a.lamports == 0));
     assert!(f.svm.get_balance(&spender).unwrap() > funded);
 
-    // An intent signed under the new index runs, and policies were not touched
-    intent.salt = 0;
-    let signature = sign(&intent, new, &user.key, f.decimals());
-    let ix = fill(&spender, &intent, new, &signature, take, USDC, None);
+    // An authorization signed under the new index runs, and mandates were not touched
+    authorization.salt = 0;
+    let signature = sign(&authorization, new, &user.key, f.decimals());
+    let ix = fill(&spender, &authorization, new, &signature, take, USDC, None);
     f.send(&[ix], &[&payee.key]).unwrap();
     assert_eq!(f.profile(&owner).1, 0);
 }
 
 #[test]
-fn the_owner_ends_every_policy_at_once_and_they_close() {
+fn the_owner_ends_every_mandate_at_once_and_they_close() {
     let mut f = Fixture::new();
     let user = f.wallet(100 * USDC, 0);
     let (merchant, other) = (f.wallet(0, 0), f.wallet(0, 0));
@@ -252,11 +300,11 @@ fn the_owner_ends_every_policy_at_once_and_they_close() {
     let user_usdc = user.usdc.to_bytes();
     let (owner, payer) = (user.address(), sponsor.pubkey());
 
-    // Policies are numbered as they are created: 1, 2, 3
+    // Mandates are numbered as they are created: 1, 2, 3
     let limits = limit(&user_usdc, &usdc, USDC, MONTHLY);
     let bytes = encode(&terms(&u, Some(&m), None, limits, None));
     for index in 1..=3 {
-        // A policy cannot take a number out of turn
+        // A mandate cannot take a number out of turn
         let skip = create(&owner, &payer, index + 1, &bytes);
         assert!(refused(
             f.send(&[skip], &[&sponsor, &user.key]),
@@ -273,7 +321,7 @@ fn the_owner_ends_every_policy_at_once_and_they_close() {
     };
     pull(&mut f, 1).unwrap();
 
-    // Another wallet's profile does not vouch for this one's policies
+    // Another wallet's profile does not vouch for this one's mandates
     let accounts = (user.usdc, f.usdc, merchant.usdc);
     let spender = merchant.address();
     let mut ix = pull_for(&spender, &owner, 2, accounts, USDC, None, TOKEN, &[]);
@@ -284,15 +332,22 @@ fn the_owner_ends_every_policy_at_once_and_they_close() {
     ));
 
     // One transaction ends all three, and only the owner can send it
-    let mut forged = invalidate(&owner, POLICIES);
+    let mut forged = invalidate(&owner, MANDATES);
     forged.accounts[0].pubkey = stranger.pubkey();
     assert!(refused(
         f.send(&[forged], &[&stranger]),
         PullError::InvalidProfile
     ));
-    f.send(&[invalidate(&owner, POLICIES)], &[&user.key])
+    // A fourth `Create`, signed now and held back, as a durable-nonce transaction can be
+    let held = create(&owner, &payer, 4, &bytes);
+    f.send(&[invalidate(&owner, MANDATES)], &[&user.key])
         .unwrap();
-    assert_eq!(f.profile(&owner), (3, 3, f.nonce_index(&owner)));
+    // Ending them uses up number 4 too, so what was held can never land
+    assert_eq!(f.profile(&owner), (4, 4, f.nonce_index(&owner)));
+    assert!(refused(
+        f.send(&[held], &[&sponsor, &user.key]),
+        PullError::InvalidSeeds
+    ));
     for index in 1..=3 {
         assert!(refused(pull(&mut f, index), PullError::Stale));
     }
@@ -300,22 +355,22 @@ fn the_owner_ends_every_policy_at_once_and_they_close() {
     // Anyone closes what was ended, and the rent goes back to who paid it
     let funded = f.svm.get_balance(&payer).unwrap();
     for index in 1..=3 {
-        let policy = policy_pda(&owner, index);
-        let ix = close(&stranger.pubkey(), &policy, &payer, &owner);
+        let mandate = mandate_pda(&owner, index);
+        let ix = close(&stranger.pubkey(), &mandate, &payer, &owner);
         f.send(&[ix], &[&stranger]).unwrap();
-        assert!(f.svm.get_account(&policy).is_none_or(|a| a.lamports == 0));
+        assert!(f.svm.get_account(&mandate).is_none_or(|a| a.lamports == 0));
     }
     assert!(f.svm.get_balance(&payer).unwrap() > funded);
 
-    // The next policy takes the next number, and works
-    let create = create(&owner, &payer, 4, &bytes);
+    // The next mandate takes the next number, and works
+    let create = create(&owner, &payer, 5, &bytes);
     f.send(&[create], &[&sponsor, &user.key]).unwrap();
-    pull(&mut f, 4).unwrap();
+    pull(&mut f, 5).unwrap();
     assert_eq!(f.balance(&merchant.usdc), 2 * USDC);
 }
 
 #[test]
-fn closing_a_policy_returns_the_rent_at_once() {
+fn closing_a_mandate_returns_the_rent_at_once() {
     let mut f = Fixture::new();
     let user = f.wallet(10 * USDC, 0);
     let (merchant, sponsor, stranger) = (f.wallet(0, 0), f.payer(), f.payer());
@@ -328,9 +383,9 @@ fn closing_a_policy_returns_the_rent_at_once() {
     let (owner, payer) = (user.address(), sponsor.pubkey());
 
     // The user signs the transaction; a sponsor pays the fee and the rent.
-    // One policy never expires, the other does
+    // One mandate never expires, the other does
     let limits = limit(&user_usdc, &usdc, USDC, MONTHLY);
-    let policies = [policy_pda(&owner, 1), policy_pda(&owner, 2)];
+    let mandates = [mandate_pda(&owner, 1), mandate_pda(&owner, 2)];
     for (index, not_after) in [(1, None), (2, Some(NOW + 365 * DAY))] {
         let bytes = encode(&terms(&u, Some(&m), not_after, limits, None));
         let create = create(&owner, &payer, index, &bytes);
@@ -338,27 +393,27 @@ fn closing_a_policy_returns_the_rent_at_once() {
     }
     let funded = f.svm.get_balance(&payer).unwrap();
 
-    // Only the owner ends a policy that is in force: not a stranger, not its
+    // Only the owner ends a mandate that is in force: not a stranger, not its
     // spender, by `Cancel` or by `Close`. And the rent goes only to its payer
     for other in [&stranger, &merchant.key] {
-        let ix = cancel_policy(&other.pubkey(), &policies[0], &payer);
+        let ix = cancel_mandate(&other.pubkey(), &mandates[0], &payer);
         assert!(refused(
             f.send(&[ix], &[other]),
             PullError::InvalidAuthority
         ));
     }
-    let ix = close(&owner, &policies[0], &payer, &owner);
+    let ix = close(&owner, &mandates[0], &payer, &owner);
     assert!(refused(f.send(&[ix], &[&user.key]), PullError::NotClosable));
-    let ix = cancel_policy(&owner, &policies[0], &owner);
+    let ix = cancel_mandate(&owner, &mandates[0], &owner);
     assert!(refused(
         f.send(&[ix], &[&user.key]),
         PullError::InvalidPayer
     ));
-    let ix = cancel_policy(&owner, &policies[0], &payer);
+    let ix = cancel_mandate(&owner, &mandates[0], &payer);
     f.send(&[ix], &[&user.key]).unwrap();
 
-    // Once a policy has expired, anyone closes it
-    let ix = close(&stranger.pubkey(), &policies[1], &payer, &owner);
+    // Once a mandate has expired, anyone closes it
+    let ix = close(&stranger.pubkey(), &mandates[1], &payer, &owner);
     assert!(refused(
         f.send(std::slice::from_ref(&ix), &[&stranger]),
         PullError::NotClosable
@@ -366,8 +421,8 @@ fn closing_a_policy_returns_the_rent_at_once() {
     f.set_time(NOW + 365 * DAY);
     f.send(&[ix], &[&stranger]).unwrap();
 
-    for policy in &policies {
-        assert!(f.svm.get_account(policy).is_none_or(|a| a.lamports == 0));
+    for mandate in &mandates {
+        assert!(f.svm.get_account(mandate).is_none_or(|a| a.lamports == 0));
     }
     assert!(f.svm.get_balance(&payer).unwrap() > funded);
 }
@@ -475,14 +530,14 @@ fn dca_runs_once_a_day_for_anyone_who_delivers() {
 }
 
 #[test]
-fn a_policy_reaches_only_its_authoritys_accounts() {
+fn a_mandate_reaches_only_its_authoritys_accounts() {
     let mut f = Fixture::new();
     let victim = f.wallet(100 * USDC, 0);
     let thief = f.wallet(0, 0);
     let (t, usdc) = (thief.address().to_bytes(), f.usdc.to_bytes());
     let victim_usdc = victim.usdc.to_bytes();
 
-    // The engine is the victim's delegate too, but this policy is the thief's
+    // The engine is the victim's delegate too, but this mandate is the thief's
     let limits = limit(&victim_usdc, &usdc, 100 * USDC, Per::Total);
     let bytes = encode(&terms(&t, Some(&t), None, limits, None));
     let key = thief.address();
@@ -512,7 +567,7 @@ fn terms_that_name_a_destination_pay_only_there() {
     let (user_usdc, payee_usdc) = (user.usdc.to_bytes(), payee.usdc.to_bytes());
     let owner = user.address();
 
-    // A policy: the relayer may move 10 USDC a month, only to the payee
+    // A mandate: the relayer may move 10 USDC a month, only to the payee
     let mut limits = limit(&user_usdc, &usdc, 10 * USDC, MONTHLY);
     limits.to = Some(&payee_usdc);
     let bytes = encode(&terms(&u, Some(&r), None, limits, None));
@@ -529,7 +584,7 @@ fn terms_that_name_a_destination_pay_only_there() {
     let ix = pull(&key, &owner, 1, there, USDC, None, TOKEN);
     f.send(&[ix], &[&relayer.key]).unwrap();
 
-    // An intent with no spender: anyone lands the payout, and it still goes to the payee
+    // An authorization with no spender: anyone lands the payout, and it still goes to the payee
     let mut limits = limit(&user_usdc, &usdc, 50 * USDC, Per::Total);
     limits.to = Some(&payee_usdc);
     let payout = terms(&u, None, None, limits, None);
@@ -552,7 +607,7 @@ fn terms_that_name_a_destination_pay_only_there() {
 /// Wallets sign a message in one of two ways: the text alone, or the text
 /// in an Offchain Message. The program verifies either, as what it is.
 #[test]
-fn an_intent_is_signed_as_text_or_as_an_offchain_message() {
+fn an_authorization_is_signed_as_text_or_as_an_offchain_message() {
     let mut f = Fixture::new();
     let user = f.wallet(100 * USDC, 0);
     let payee = f.wallet(0, 0);
@@ -566,14 +621,14 @@ fn an_intent_is_signed_as_text_or_as_an_offchain_message() {
     let index = f.nonce_index(&owner);
     let take = (user.usdc, f.usdc, payee.usdc);
     let limits = limit(&user_usdc, &usdc, 10 * USDC, Per::Total);
-    let mut intent = terms(&u, Some(&p), None, limits, None);
+    let mut authorization = terms(&u, Some(&p), None, limits, None);
 
     for (salt, envelope, byte) in [(0, Envelope::Text, 0), (1, Envelope::OffchainMessage, 1)] {
-        intent.salt = salt;
-        let signature = sign_as(envelope, &intent, index, &user.key, f.decimals());
+        authorization.salt = salt;
+        let signature = sign_as(envelope, &authorization, index, &user.key, f.decimals());
         // Byte 8 of the data, after the amount, says which one the wallet signed
         let fill_as = |byte: u8| {
-            let mut ix = fill(&key, &intent, index, &signature, take, USDC, None);
+            let mut ix = fill(&key, &authorization, index, &signature, take, USDC, None);
             ix.data[9] = byte;
             ix
         };
@@ -587,10 +642,10 @@ fn an_intent_is_signed_as_text_or_as_an_offchain_message() {
     assert_eq!(f.balance(&payee.usdc), 2 * USDC);
 }
 
-/// An intent that anyone may fill and that asks nothing back is all or
+/// An authorization that anyone may fill and that asks nothing back is all or
 /// nothing: otherwise a stranger fills it for nothing and it is used up.
 #[test]
-fn an_intent_open_to_anyone_runs_whole_or_not_at_all() {
+fn an_authorization_open_to_anyone_runs_whole_or_not_at_all() {
     let mut f = Fixture::new();
     let user = f.wallet(100 * USDC, 0);
     let (payee, stranger) = (f.wallet(0, 0), f.wallet(0, 0));
@@ -628,7 +683,7 @@ fn an_intent_open_to_anyone_runs_whole_or_not_at_all() {
     let ix = fill(&key, &hold, index, &signature, there, 20 * USDC, None);
     f.send(&[ix], &[&payee.key]).unwrap();
 
-    // An intent runs once, so it cannot be signed for a limit over time
+    // An authorization runs once, so it cannot be signed for a limit over time
     let mut monthly = hold;
     (monthly.salt, monthly.limit.per) = (2, MONTHLY);
     let signature = sign(&monthly, index, &user.key, f.decimals());
@@ -643,7 +698,7 @@ fn an_intent_open_to_anyone_runs_whole_or_not_at_all() {
 /// funds the address ahead and names a payer the rent can never go back to,
 /// and the owner can never cancel.
 #[test]
-fn the_payer_of_a_policy_signed_for_it() {
+fn the_payer_of_a_mandate_signed_for_it() {
     let mut f = Fixture::new();
     let user = f.wallet(10 * USDC, 0);
     let merchant = f.wallet(0, 0);
@@ -663,9 +718,9 @@ fn the_payer_of_a_policy_signed_for_it() {
     ));
 
     // The address holds its rent already, so no transfer needs the payer
-    let policy = policy_pda(&owner, 1);
-    f.svm.airdrop(&policy, SOL).unwrap();
-    for payer in [policy, solana_address::Address::new_unique()] {
+    let mandate = mandate_pda(&owner, 1);
+    f.svm.airdrop(&mandate, SOL).unwrap();
+    for payer in [mandate, solana_address::Address::new_unique()] {
         let mut ix = create(&owner, &owner, 1, &bytes);
         ix.accounts[1] = solana_instruction::AccountMeta::new(payer, false);
         assert!(refused(f.send(&[ix], &[&user.key]), PullError::NotSigner));
@@ -673,7 +728,7 @@ fn the_payer_of_a_policy_signed_for_it() {
     // With a payer that signs, the owner creates it and can cancel it
     f.send(&[create(&owner, &owner, 1, &bytes)], &[&user.key])
         .unwrap();
-    f.send(&[cancel_policy(&owner, &policy, &owner)], &[&user.key])
+    f.send(&[cancel_mandate(&owner, &mandate, &owner)], &[&user.key])
         .unwrap();
 }
 
@@ -698,7 +753,7 @@ fn substituted_accounts_are_refused() {
     let (owner, key) = (user.address(), thief.address());
     let take = (user.usdc, f.usdc, thief.usdc);
 
-    // An intent the thief signs for the victim's account, with its own profile
+    // An authorization the thief signs for the victim's account, with its own profile
     let stolen = terms(
         &t,
         Some(&t),
@@ -781,20 +836,23 @@ fn substituted_accounts_are_refused() {
     fill_with(&mut f, &|_| ()).unwrap();
     assert_eq!(f.balance(&user.sol), SOL);
 
-    // `Cancel` and `Close` take a policy or a page of nonces, each as what it is
+    // `Cancel` and `Close` take a mandate or a page of nonces, each as what it is
     let bytes = encode(&terms(&u, Some(&t), None, limits, None));
     f.send(&[create(&owner, &owner, 1, &bytes)], &[&user.key])
         .unwrap();
-    let (policy, page) = (policy_pda(&owner, 1), nonces_pda(&owner, index, 0));
-    let ix = cancel_policy(&owner, &page, &key);
+    let (mandate, page) = (mandate_pda(&owner, 1), nonces_pda(&owner, index, 0));
+    let ix = cancel_mandate(&owner, &page, &key);
     assert!(refused(f.send(&[ix], &[&user.key]), PullError::InvalidTag));
     let mut ix = cancel(&owner, index, 0);
-    ix.accounts[3].pubkey = policy;
+    ix.accounts[3].pubkey = mandate;
     assert!(refused(f.send(&[ix], &[&user.key]), PullError::InvalidTag));
-    // The thief ended its own policies and intents; that does not end the user's
-    f.send(&[invalidate(&key, POLICIES | INTENTS)], &[&thief.key])
-        .unwrap();
-    for account in [policy, page] {
+    // The thief ended its own mandates and authorizations; that does not end the user's
+    f.send(
+        &[invalidate(&key, MANDATES | AUTHORIZATIONS)],
+        &[&thief.key],
+    )
+    .unwrap();
+    for account in [mandate, page] {
         let ix = close(&key, &account, &owner, &key);
         assert!(refused(
             f.send(&[ix], &[&thief.key]),
@@ -981,7 +1039,7 @@ fn a_fee_token_never_shorts_the_authority() {
 }
 
 /// A reference model of the limit, run against the program on random
-/// policies, pulls and waits: the program accepts exactly what the model
+/// mandates, pulls and waits: the program accepts exactly what the model
 /// accepts, so no sequence of pulls gets past the limit. The model steps
 /// through the windows where the program divides, so the two do not share
 /// a formula.
@@ -1050,7 +1108,7 @@ fn random_pulls_never_pass_a_limit() {
                 TOKEN,
             );
             let accepted = f.send(&[ix], &[&merchant.key]).is_ok();
-            assert_eq!(accepted, fits, "policy {salt}: {limits:?} pull {amount}");
+            assert_eq!(accepted, fits, "mandate {salt}: {limits:?} pull {amount}");
 
             if accepted {
                 paid += amount;

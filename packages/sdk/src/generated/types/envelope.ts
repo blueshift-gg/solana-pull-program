@@ -15,7 +15,7 @@ import {
   type FixedSizeEncoder,
 } from "@solana/kit";
 
-/** What comes before the intent text in the bytes the authority signed. */
+/** What comes before the authorization text in the bytes the authority signed. */
 export const Envelope = {
   0: "Text",
   1: "OffchainMessage",
@@ -23,7 +23,7 @@ export const Envelope = {
   OffchainMessage: 1,
 } as const;
 
-/** What comes before the intent text in the bytes the authority signed. */
+/** What comes before the authorization text in the bytes the authority signed. */
 export type Envelope = (typeof Envelope)[Exclude<
   keyof typeof Envelope,
   number

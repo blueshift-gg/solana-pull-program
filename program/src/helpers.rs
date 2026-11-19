@@ -115,7 +115,7 @@ pub fn decimals(mint: &AccountInfo) -> Result<u8, PullError> {
 
 /// The balance of token account `account`, after checking it is what the
 /// terms name: this mint, and the authority's own. The engine is the delegate
-/// of many wallets, so this is what keeps a policy to its authority's funds.
+/// of many wallets, so this is what keeps a mandate to its authority's funds.
 pub fn balance(account: &AccountInfo, mint: &Pubkey, owner: &Pubkey) -> Result<u64, PullError> {
     let data = token_data(account, 165, 2)?;
     if data[..32].ne(mint) || data[32..64].ne(owner) {

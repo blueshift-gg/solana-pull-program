@@ -39,7 +39,7 @@ fn process_instruction(
     instruction_data: &[u8],
 ) -> ProgramResult {
     match instruction_data.split_first() {
-        // Policies: a standing permission on chain. Pull runs on every payment
+        // Mandates: a standing permission on chain. Pull runs on every payment
         Some((Pull::DISCRIMINATOR, data)) => Pull::try_from((data, accounts))?.process(),
         Some((Create::DISCRIMINATOR, data)) => Create::try_from((data, accounts))?.process(),
         Some((Close::DISCRIMINATOR, _)) => Close::try_from(accounts)?.process(),
@@ -50,7 +50,7 @@ fn process_instruction(
             Invalidate::try_from((data, accounts))?.process()
         }
 
-        // Intents: one signed action - Discriminators from 10
+        // Authorizations: one signed action - Discriminators from 10
         Some((Fill::DISCRIMINATOR, data)) => Fill::try_from((data, accounts))?.process(),
         Some((Cancel::DISCRIMINATOR, data)) => Cancel::try_from((data, accounts))?.process(),
 

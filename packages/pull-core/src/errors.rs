@@ -28,7 +28,7 @@ pub enum PullError {
     InvalidAuthority,
     /// The signature does not cover the rendered terms
     InvalidSignature,
-    /// The intent's nonce was used: it ran already, or was cancelled
+    /// The authorization's nonce was used: it ran already, or was cancelled
     NonceUsed,
     /// A timestamp outside years 1970–9999 cannot be rendered
     Unrenderable,
@@ -39,7 +39,7 @@ pub enum PullError {
     Expired,
     /// The signer is not the terms' spender
     InvalidSpender,
-    /// A policy in force, or a page of nonces whose index is the profile's:
+    /// A mandate in force, or a page of nonces whose index is the profile's:
     /// `Close` takes only what can never be used again
     NotClosable,
     /// The account is not the one that paid the rent being refunded
@@ -68,11 +68,11 @@ pub enum PullError {
 
     /// The account is not the authority's profile, or the authority has none
     InvalidProfile,
-    /// The authority invalidated this policy
+    /// The authority invalidated this mandate
     Stale,
     /// The tokens would not go to the account the terms name
     InvalidDestination,
-    /// An intent anyone may fill for nothing in return runs for its whole
+    /// An authorization anyone may fill for nothing in return runs for its whole
     /// amount, or a stranger could use it up for less
     InexactAmount,
 }

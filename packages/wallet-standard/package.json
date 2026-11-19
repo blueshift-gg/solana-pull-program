@@ -1,7 +1,7 @@
 {
     "name": "@solana-pull/wallet-standard-features",
     "version": "0.0.1",
-    "description": "The solana:signIntent Wallet Standard feature",
+    "description": "The solana:signAuthorization Wallet Standard feature",
     "license": "MIT",
     "private": true,
     "type": "module",

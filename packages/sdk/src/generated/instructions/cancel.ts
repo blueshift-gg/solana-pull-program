@@ -99,12 +99,12 @@ export type CancelInstruction<
 
 export type CancelInstructionData = {
   discriminator: number;
-  /** The intent's salt. None for a policy. */
+  /** The authorization's salt. None for a mandate. */
   salt: Option<bigint>;
 };
 
 export type CancelInstructionDataArgs = {
-  /** The intent's salt. None for a policy. */
+  /** The authorization's salt. None for a mandate. */
   salt: OptionOrNullable<number | bigint>;
 };
 
@@ -147,10 +147,10 @@ export type CancelAsyncInput<
   TAccountProgram extends InstructionAccountInput = InstructionAccountInput,
 > = {
   authority: TAccountAuthority;
-  /** A policy: its recorded payer. An intent: a signer that funds the page of nonces. */
+  /** A mandate: its recorded payer. An authorization: a signer that funds the page of nonces. */
   payer: TAccountPayer;
   profile?: TAccountProfile;
-  /** The policy, or the page of nonces of the intent. */
+  /** The mandate, or the page of nonces of the authorization. */
   account: TAccountAccount;
   systemProgram?: TAccountSystemProgram;
   engine?: TAccountEngine;
@@ -343,10 +343,10 @@ export type CancelInput<
   TAccountProgram extends InstructionAccountInput = InstructionAccountInput,
 > = {
   authority: TAccountAuthority;
-  /** A policy: its recorded payer. An intent: a signer that funds the page of nonces. */
+  /** A mandate: its recorded payer. An authorization: a signer that funds the page of nonces. */
   payer: TAccountPayer;
   profile: TAccountProfile;
-  /** The policy, or the page of nonces of the intent. */
+  /** The mandate, or the page of nonces of the authorization. */
   account: TAccountAccount;
   systemProgram?: TAccountSystemProgram;
   engine?: TAccountEngine;
@@ -521,10 +521,10 @@ export type ParsedCancelInstruction<
   programAddress: Address<TProgram>;
   accounts: {
     authority: TAccountMetas[0];
-    /** A policy: its recorded payer. An intent: a signer that funds the page of nonces. */
+    /** A mandate: its recorded payer. An authorization: a signer that funds the page of nonces. */
     payer: TAccountMetas[1];
     profile: TAccountMetas[2];
-    /** The policy, or the page of nonces of the intent. */
+    /** The mandate, or the page of nonces of the authorization. */
     account: TAccountMetas[3];
     systemProgram: TAccountMetas[4];
     engine: TAccountMetas[5];

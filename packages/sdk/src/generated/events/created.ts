@@ -33,7 +33,7 @@ export function getCreatedEventDiscriminatorBytes(): ReadonlyUint8Array {
   return getBytesEncoder().encode(CREATED_EVENT_DISCRIMINATOR);
 }
 
-export type CreatedEvent = { policy: Address; authority: Address };
+export type CreatedEvent = { mandate: Address; authority: Address };
 
 export type CreatedEventArgs = CreatedEvent;
 
@@ -41,7 +41,7 @@ export type CreatedEventArgs = CreatedEvent;
 export function getCreatedEventEncoder(): FixedSizeEncoder<CreatedEventArgs> {
   return getHiddenPrefixEncoder(
     getStructEncoder([
-      ["policy", getAddressEncoder()],
+      ["mandate", getAddressEncoder()],
       ["authority", getAddressEncoder()],
     ]),
     [getConstantEncoder(CREATED_EVENT_DISCRIMINATOR)],
@@ -52,7 +52,7 @@ export function getCreatedEventEncoder(): FixedSizeEncoder<CreatedEventArgs> {
 export function getCreatedEventDecoder(): FixedSizeDecoder<CreatedEvent> {
   return getHiddenPrefixDecoder(
     getStructDecoder([
-      ["policy", getAddressDecoder()],
+      ["mandate", getAddressDecoder()],
       ["authority", getAddressDecoder()],
     ]),
     [getConstantDecoder(CREATED_EVENT_DISCRIMINATOR)],

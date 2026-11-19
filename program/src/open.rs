@@ -7,8 +7,8 @@ use pull_core::{constants::*, errors::PullError};
 
 /// # Open
 ///
-/// Create the authority's profile, once: what numbers its policies and what
-/// its intents are signed under. It goes in the transaction that enables the
+/// Create the authority's profile, once: what numbers its mandates and what
+/// its authorizations are signed under. It goes in the transaction that enables the
 /// first token account.
 ///
 /// > Create the Profile PDA

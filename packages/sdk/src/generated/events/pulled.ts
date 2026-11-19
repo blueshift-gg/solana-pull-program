@@ -39,7 +39,7 @@ export function getPulledEventDiscriminatorBytes(): ReadonlyUint8Array {
 }
 
 export type PulledEvent = {
-  policy: Address;
+  mandate: Address;
   spender: Address;
   amount: bigint;
   paid: bigint;
@@ -47,7 +47,7 @@ export type PulledEvent = {
 };
 
 export type PulledEventArgs = {
-  policy: Address;
+  mandate: Address;
   spender: Address;
   amount: number | bigint;
   paid: number | bigint;
@@ -58,7 +58,7 @@ export type PulledEventArgs = {
 export function getPulledEventEncoder(): FixedSizeEncoder<PulledEventArgs> {
   return getHiddenPrefixEncoder(
     getStructEncoder([
-      ["policy", getAddressEncoder()],
+      ["mandate", getAddressEncoder()],
       ["spender", getAddressEncoder()],
       ["amount", getU64Encoder()],
       ["paid", getU64Encoder()],
@@ -72,7 +72,7 @@ export function getPulledEventEncoder(): FixedSizeEncoder<PulledEventArgs> {
 export function getPulledEventDecoder(): FixedSizeDecoder<PulledEvent> {
   return getHiddenPrefixDecoder(
     getStructDecoder([
-      ["policy", getAddressDecoder()],
+      ["mandate", getAddressDecoder()],
       ["spender", getAddressDecoder()],
       ["amount", getU64Decoder()],
       ["paid", getU64Decoder()],

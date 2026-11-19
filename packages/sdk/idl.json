@@ -10,7 +10,7 @@
     "accounts": [
       {
         "kind": "accountNode",
-        "name": "policy",
+        "name": "mandate",
         "docs": [
           "A standing permission on chain: this header, then its terms."
         ],
@@ -66,7 +66,7 @@
               "kind": "structFieldTypeNode",
               "name": "index",
               "docs": [
-                "Its number among the authority's policies."
+                "Its number among the authority's mandates."
               ],
               "type": {
                 "kind": "numberTypeNode",
@@ -94,7 +94,7 @@
         },
         "pda": {
           "kind": "pdaLinkNode",
-          "name": "policy"
+          "name": "mandate"
         },
         "discriminators": [
           {
@@ -108,7 +108,7 @@
         "kind": "accountNode",
         "name": "nonces",
         "docs": [
-          "One page of the nonces an authority's signed intents have used or cancelled."
+          "One page of the nonces an authority's signed authorizations have used or cancelled."
         ],
         "data": {
           "kind": "structTypeNode",
@@ -138,7 +138,7 @@
               "kind": "structFieldTypeNode",
               "name": "index",
               "docs": [
-                "The nonce index its intents were signed under."
+                "The nonce index its authorizations were signed under."
               ],
               "type": {
                 "kind": "numberTypeNode",
@@ -194,7 +194,7 @@
         "kind": "accountNode",
         "name": "profile",
         "docs": [
-          "An authority's profile: it numbers its policies and holds what invalidates them and its intents."
+          "An authority's profile: it numbers its mandates and holds what invalidates them and its authorizations."
         ],
         "data": {
           "kind": "structTypeNode",
@@ -222,9 +222,9 @@
             },
             {
               "kind": "structFieldTypeNode",
-              "name": "policies",
+              "name": "mandates",
               "docs": [
-                "How many policies it has created; they are numbered from 1."
+                "How many mandates it has created; they are numbered from 1."
               ],
               "type": {
                 "kind": "numberTypeNode",
@@ -236,7 +236,7 @@
               "kind": "structFieldTypeNode",
               "name": "stale",
               "docs": [
-                "Every policy numbered this or less is invalid."
+                "Every mandate numbered this or less is invalid."
               ],
               "type": {
                 "kind": "numberTypeNode",
@@ -248,7 +248,7 @@
               "kind": "structFieldTypeNode",
               "name": "nonceIndex",
               "docs": [
-                "What its intents are signed under."
+                "What its authorizations are signed under."
               ],
               "type": {
                 "kind": "numberTypeNode",
@@ -276,7 +276,7 @@
         "kind": "instructionNode",
         "name": "create",
         "docs": [
-          "Put a policy on chain, under the next number of the profile."
+          "Put a mandate on chain, under the next number of the profile."
         ],
         "optionalAccountStrategy": "omitted",
         "accounts": [
@@ -323,7 +323,7 @@
           },
           {
             "kind": "instructionAccountNode",
-            "name": "policy",
+            "name": "mandate",
             "isWritable": true,
             "isSigner": false,
             "isOptional": false
@@ -337,6 +337,10 @@
             "defaultValue": {
               "kind": "publicKeyValueNode",
               "publicKey": "11111111111111111111111111111111"
+            },
+            "display": {
+              "kind": "instructionAccountDisplayNode",
+              "skip": "always"
             }
           },
           {
@@ -348,6 +352,10 @@
             "defaultValue": {
               "kind": "publicKeyValueNode",
               "publicKey": "58eSE1WJDvzrwz7BZ23sbsDiqa75pxetzkyRyUcPwb6E"
+            },
+            "display": {
+              "kind": "instructionAccountDisplayNode",
+              "skip": "always"
             }
           },
           {
@@ -359,6 +367,10 @@
             "defaultValue": {
               "kind": "publicKeyValueNode",
               "publicKey": "PULLrgDYqK1yFKVTSbWieX3ARP7U2XUyrjxWXqKgVzA"
+            },
+            "display": {
+              "kind": "instructionAccountDisplayNode",
+              "skip": "always"
             }
           }
         ],
@@ -375,6 +387,10 @@
             "defaultValue": {
               "kind": "numberValueNode",
               "number": 0
+            },
+            "display": {
+              "kind": "structFieldDisplayNode",
+              "skip": "always"
             }
           },
           {
@@ -392,13 +408,18 @@
             "name": "discriminator",
             "offset": 0
           }
-        ]
+        ],
+        "display": {
+          "kind": "instructionDisplayNode",
+          "intent": "Approve a mandate",
+          "interpolatedIntent": "Let a spender collect from your account, within these terms: ${data.terms}"
+        }
       },
       {
         "kind": "instructionNode",
         "name": "pull",
         "docs": [
-          "Take tokens under a policy, and deliver what the authority must receive."
+          "Take tokens under a mandate, and deliver what the authority must receive."
         ],
         "optionalAccountStrategy": "omitted",
         "accounts": [
@@ -411,7 +432,7 @@
           },
           {
             "kind": "instructionAccountNode",
-            "name": "policy",
+            "name": "mandate",
             "isWritable": true,
             "isSigner": false,
             "isOptional": false
@@ -459,6 +480,10 @@
             "defaultValue": {
               "kind": "publicKeyValueNode",
               "publicKey": "58eSE1WJDvzrwz7BZ23sbsDiqa75pxetzkyRyUcPwb6E"
+            },
+            "display": {
+              "kind": "instructionAccountDisplayNode",
+              "skip": "always"
             }
           },
           {
@@ -470,6 +495,10 @@
             "defaultValue": {
               "kind": "publicKeyValueNode",
               "publicKey": "PULLrgDYqK1yFKVTSbWieX3ARP7U2XUyrjxWXqKgVzA"
+            },
+            "display": {
+              "kind": "instructionAccountDisplayNode",
+              "skip": "always"
             }
           },
           {
@@ -481,6 +510,10 @@
             "defaultValue": {
               "kind": "publicKeyValueNode",
               "publicKey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+            },
+            "display": {
+              "kind": "instructionAccountDisplayNode",
+              "skip": "always"
             }
           },
           {
@@ -528,6 +561,10 @@
             "defaultValue": {
               "kind": "numberValueNode",
               "number": 1
+            },
+            "display": {
+              "kind": "structFieldDisplayNode",
+              "skip": "always"
             }
           },
           {
@@ -563,7 +600,12 @@
             "name": "discriminator",
             "offset": 0
           }
-        ]
+        ],
+        "display": {
+          "kind": "instructionDisplayNode",
+          "intent": "Collect under a mandate",
+          "interpolatedIntent": "Collect ${data.amount} from ${accounts.from} to ${accounts.to}, under mandate ${accounts.mandate}"
+        }
       },
       {
         "kind": "instructionNode",
@@ -587,7 +629,7 @@
             "isSigner": false,
             "isOptional": false,
             "docs": [
-              "A policy that expired or was invalidated, or a page of nonces under an old nonce index."
+              "A mandate that expired or was invalidated, or a page of nonces under an old nonce index."
             ]
           },
           {
@@ -616,6 +658,10 @@
             "defaultValue": {
               "kind": "publicKeyValueNode",
               "publicKey": "58eSE1WJDvzrwz7BZ23sbsDiqa75pxetzkyRyUcPwb6E"
+            },
+            "display": {
+              "kind": "instructionAccountDisplayNode",
+              "skip": "always"
             }
           },
           {
@@ -627,6 +673,10 @@
             "defaultValue": {
               "kind": "publicKeyValueNode",
               "publicKey": "PULLrgDYqK1yFKVTSbWieX3ARP7U2XUyrjxWXqKgVzA"
+            },
+            "display": {
+              "kind": "instructionAccountDisplayNode",
+              "skip": "always"
             }
           }
         ],
@@ -643,6 +693,10 @@
             "defaultValue": {
               "kind": "numberValueNode",
               "number": 2
+            },
+            "display": {
+              "kind": "structFieldDisplayNode",
+              "skip": "always"
             }
           }
         ],
@@ -652,7 +706,12 @@
             "name": "discriminator",
             "offset": 0
           }
-        ]
+        ],
+        "display": {
+          "kind": "instructionDisplayNode",
+          "intent": "Close an ended account",
+          "interpolatedIntent": "Close ${accounts.account}, which can never be used again, and return its rent to ${accounts.payer}"
+        }
       },
       {
         "kind": "instructionNode",
@@ -709,6 +768,10 @@
             "defaultValue": {
               "kind": "publicKeyValueNode",
               "publicKey": "11111111111111111111111111111111"
+            },
+            "display": {
+              "kind": "instructionAccountDisplayNode",
+              "skip": "always"
             }
           },
           {
@@ -720,6 +783,10 @@
             "defaultValue": {
               "kind": "publicKeyValueNode",
               "publicKey": "58eSE1WJDvzrwz7BZ23sbsDiqa75pxetzkyRyUcPwb6E"
+            },
+            "display": {
+              "kind": "instructionAccountDisplayNode",
+              "skip": "always"
             }
           },
           {
@@ -731,6 +798,10 @@
             "defaultValue": {
               "kind": "publicKeyValueNode",
               "publicKey": "PULLrgDYqK1yFKVTSbWieX3ARP7U2XUyrjxWXqKgVzA"
+            },
+            "display": {
+              "kind": "instructionAccountDisplayNode",
+              "skip": "always"
             }
           }
         ],
@@ -747,6 +818,10 @@
             "defaultValue": {
               "kind": "numberValueNode",
               "number": 3
+            },
+            "display": {
+              "kind": "structFieldDisplayNode",
+              "skip": "always"
             }
           }
         ],
@@ -756,13 +831,18 @@
             "name": "discriminator",
             "offset": 0
           }
-        ]
+        ],
+        "display": {
+          "kind": "instructionDisplayNode",
+          "intent": "Open a profile",
+          "interpolatedIntent": "Open the profile of ${accounts.authority} with the Pull program"
+        }
       },
       {
         "kind": "instructionNode",
         "name": "invalidate",
         "docs": [
-          "End every policy so far, every intent so far, or both."
+          "End every mandate so far, every authorization so far, or both."
         ],
         "optionalAccountStrategy": "omitted",
         "accounts": [
@@ -806,6 +886,10 @@
             "defaultValue": {
               "kind": "publicKeyValueNode",
               "publicKey": "58eSE1WJDvzrwz7BZ23sbsDiqa75pxetzkyRyUcPwb6E"
+            },
+            "display": {
+              "kind": "instructionAccountDisplayNode",
+              "skip": "always"
             }
           },
           {
@@ -817,6 +901,10 @@
             "defaultValue": {
               "kind": "publicKeyValueNode",
               "publicKey": "PULLrgDYqK1yFKVTSbWieX3ARP7U2XUyrjxWXqKgVzA"
+            },
+            "display": {
+              "kind": "instructionAccountDisplayNode",
+              "skip": "always"
             }
           }
         ],
@@ -833,13 +921,17 @@
             "defaultValue": {
               "kind": "numberValueNode",
               "number": 4
+            },
+            "display": {
+              "kind": "structFieldDisplayNode",
+              "skip": "always"
             }
           },
           {
             "kind": "instructionArgumentNode",
             "name": "what",
             "docs": [
-              "1 for policies, 2 for intents, 3 for both."
+              "1 for mandates, 2 for authorizations, 3 for both."
             ],
             "type": {
               "kind": "numberTypeNode",
@@ -854,13 +946,18 @@
             "name": "discriminator",
             "offset": 0
           }
-        ]
+        ],
+        "display": {
+          "kind": "instructionDisplayNode",
+          "intent": "End everything",
+          "interpolatedIntent": "End every mandate (1), every signed authorization (2), or both (3): ${data.what}. This cannot be undone"
+        }
       },
       {
         "kind": "instructionNode",
         "name": "fill",
         "docs": [
-          "Run a signed intent, once."
+          "Run a signed authorization, once."
         ],
         "optionalAccountStrategy": "omitted",
         "accounts": [
@@ -904,6 +1001,10 @@
             "defaultValue": {
               "kind": "publicKeyValueNode",
               "publicKey": "11111111111111111111111111111111"
+            },
+            "display": {
+              "kind": "instructionAccountDisplayNode",
+              "skip": "always"
             }
           },
           {
@@ -942,6 +1043,10 @@
             "defaultValue": {
               "kind": "publicKeyValueNode",
               "publicKey": "58eSE1WJDvzrwz7BZ23sbsDiqa75pxetzkyRyUcPwb6E"
+            },
+            "display": {
+              "kind": "instructionAccountDisplayNode",
+              "skip": "always"
             }
           },
           {
@@ -953,6 +1058,10 @@
             "defaultValue": {
               "kind": "publicKeyValueNode",
               "publicKey": "PULLrgDYqK1yFKVTSbWieX3ARP7U2XUyrjxWXqKgVzA"
+            },
+            "display": {
+              "kind": "instructionAccountDisplayNode",
+              "skip": "always"
             }
           },
           {
@@ -964,6 +1073,10 @@
             "defaultValue": {
               "kind": "publicKeyValueNode",
               "publicKey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+            },
+            "display": {
+              "kind": "instructionAccountDisplayNode",
+              "skip": "always"
             }
           },
           {
@@ -1011,6 +1124,10 @@
             "defaultValue": {
               "kind": "numberValueNode",
               "number": 10
+            },
+            "display": {
+              "kind": "structFieldDisplayNode",
+              "skip": "always"
             }
           },
           {
@@ -1028,6 +1145,10 @@
             "type": {
               "kind": "definedTypeLinkNode",
               "name": "envelope"
+            },
+            "display": {
+              "kind": "structFieldDisplayNode",
+              "skip": "always"
             }
           },
           {
@@ -1039,6 +1160,10 @@
               "type": {
                 "kind": "bytesTypeNode"
               }
+            },
+            "display": {
+              "kind": "structFieldDisplayNode",
+              "skip": "always"
             }
           },
           {
@@ -1056,13 +1181,18 @@
             "name": "discriminator",
             "offset": 0
           }
-        ]
+        ],
+        "display": {
+          "kind": "instructionDisplayNode",
+          "intent": "Run a signed authorization",
+          "interpolatedIntent": "Take ${data.amount} from ${accounts.from} to ${accounts.to}, under terms its owner signed: ${data.terms}"
+        }
       },
       {
         "kind": "instructionNode",
         "name": "cancel",
         "docs": [
-          "The authority ends one thing: a policy, or with a salt one signed intent."
+          "The authority ends one thing: a mandate, or with a salt one signed authorization."
         ],
         "optionalAccountStrategy": "omitted",
         "accounts": [
@@ -1080,7 +1210,7 @@
             "isSigner": "either",
             "isOptional": false,
             "docs": [
-              "A policy: its recorded payer. An intent: a signer that funds the page of nonces."
+              "A mandate: its recorded payer. An authorization: a signer that funds the page of nonces."
             ]
           },
           {
@@ -1114,7 +1244,7 @@
             "isSigner": false,
             "isOptional": false,
             "docs": [
-              "The policy, or the page of nonces of the intent."
+              "The mandate, or the page of nonces of the authorization."
             ]
           },
           {
@@ -1126,6 +1256,10 @@
             "defaultValue": {
               "kind": "publicKeyValueNode",
               "publicKey": "11111111111111111111111111111111"
+            },
+            "display": {
+              "kind": "instructionAccountDisplayNode",
+              "skip": "always"
             }
           },
           {
@@ -1137,6 +1271,10 @@
             "defaultValue": {
               "kind": "publicKeyValueNode",
               "publicKey": "58eSE1WJDvzrwz7BZ23sbsDiqa75pxetzkyRyUcPwb6E"
+            },
+            "display": {
+              "kind": "instructionAccountDisplayNode",
+              "skip": "always"
             }
           },
           {
@@ -1148,6 +1286,10 @@
             "defaultValue": {
               "kind": "publicKeyValueNode",
               "publicKey": "PULLrgDYqK1yFKVTSbWieX3ARP7U2XUyrjxWXqKgVzA"
+            },
+            "display": {
+              "kind": "instructionAccountDisplayNode",
+              "skip": "always"
             }
           }
         ],
@@ -1164,13 +1306,17 @@
             "defaultValue": {
               "kind": "numberValueNode",
               "number": 11
+            },
+            "display": {
+              "kind": "structFieldDisplayNode",
+              "skip": "always"
             }
           },
           {
             "kind": "instructionArgumentNode",
             "name": "salt",
             "docs": [
-              "The intent's salt. None for a policy."
+              "The authorization's salt. None for a mandate."
             ],
             "type": {
               "kind": "remainderOptionTypeNode",
@@ -1188,7 +1334,12 @@
             "name": "discriminator",
             "offset": 0
           }
-        ]
+        ],
+        "display": {
+          "kind": "instructionDisplayNode",
+          "intent": "Cancel a mandate or an authorization",
+          "interpolatedIntent": "Cancel ${accounts.account}. It can never be used again"
+        }
       }
     ],
     "definedTypes": [
@@ -1196,7 +1347,7 @@
         "kind": "definedTypeNode",
         "name": "envelope",
         "docs": [
-          "What comes before the intent text in the bytes the authority signed."
+          "What comes before the authorization text in the bytes the authority signed."
         ],
         "type": {
           "kind": "enumTypeNode",
@@ -1251,7 +1402,10 @@
                     "type": {
                       "kind": "numberTypeNode",
                       "format": "u32",
-                      "endian": "le"
+                      "endian": "le",
+                      "display": {
+                        "kind": "durationNumberDisplayNode"
+                      }
                     }
                   }
                 ]
@@ -1342,7 +1496,10 @@
               "type": {
                 "kind": "numberTypeNode",
                 "format": "i64",
-                "endian": "le"
+                "endian": "le",
+                "display": {
+                  "kind": "dateTimeNumberDisplayNode"
+                }
               }
             },
             {
@@ -1351,7 +1508,10 @@
               "type": {
                 "kind": "numberTypeNode",
                 "format": "i64",
-                "endian": "le"
+                "endian": "le",
+                "display": {
+                  "kind": "dateTimeNumberDisplayNode"
+                }
               }
             },
             {
@@ -1422,7 +1582,7 @@
         "kind": "definedTypeNode",
         "name": "terms",
         "docs": [
-          "What an authority permits: the same for a policy and for a signed intent."
+          "What an authority permits: the same for a mandate and for a signed authorization."
         ],
         "type": {
           "kind": "structTypeNode",
@@ -1439,6 +1599,10 @@
               "defaultValue": {
                 "kind": "numberValueNode",
                 "number": 1
+              },
+              "display": {
+                "kind": "structFieldDisplayNode",
+                "skip": "always"
               }
             },
             {
@@ -1485,7 +1649,10 @@
               "type": {
                 "kind": "numberTypeNode",
                 "format": "i64",
-                "endian": "le"
+                "endian": "le",
+                "display": {
+                  "kind": "dateTimeNumberDisplayNode"
+                }
               }
             },
             {
@@ -1497,7 +1664,10 @@
                 "item": {
                   "kind": "numberTypeNode",
                   "format": "i64",
-                  "endian": "le"
+                  "endian": "le",
+                  "display": {
+                    "kind": "dateTimeNumberDisplayNode"
+                  }
                 },
                 "prefix": {
                   "kind": "numberTypeNode",
@@ -1510,12 +1680,16 @@
               "kind": "structFieldTypeNode",
               "name": "salt",
               "docs": [
-                "A signed intent's nonce. A policy does not use it."
+                "A signed authorization's nonce. A mandate does not use it."
               ],
               "type": {
                 "kind": "numberTypeNode",
                 "format": "u64",
                 "endian": "le"
+              },
+              "display": {
+                "kind": "structFieldDisplayNode",
+                "label": "Number"
               }
             },
             {
@@ -1591,7 +1765,7 @@
       },
       {
         "kind": "pdaNode",
-        "name": "policy",
+        "name": "mandate",
         "seeds": [
           {
             "kind": "constantPdaSeedNode",
@@ -1601,7 +1775,7 @@
             },
             "value": {
               "kind": "stringValueNode",
-              "string": "policy"
+              "string": "mandate"
             }
           },
           {
@@ -1676,7 +1850,7 @@
             "fields": [
               {
                 "kind": "structFieldTypeNode",
-                "name": "policy",
+                "name": "mandate",
                 "type": {
                   "kind": "publicKeyTypeNode"
                 }
@@ -1732,7 +1906,7 @@
             "fields": [
               {
                 "kind": "structFieldTypeNode",
-                "name": "policy",
+                "name": "mandate",
                 "type": {
                   "kind": "publicKeyTypeNode"
                 }
@@ -2214,7 +2388,7 @@
         "kind": "errorNode",
         "name": "nonceUsed",
         "code": 12,
-        "message": "The intent's nonce was used: it ran already, or was cancelled"
+        "message": "The authorization's nonce was used: it ran already, or was cancelled"
       },
       {
         "kind": "errorNode",
@@ -2244,7 +2418,7 @@
         "kind": "errorNode",
         "name": "notClosable",
         "code": 17,
-        "message": "A policy in force, or a page of nonces whose index is the profile's: `Close` takes only what can never be used again"
+        "message": "A mandate in force, or a page of nonces whose index is the profile's: `Close` takes only what can never be used again"
       },
       {
         "kind": "errorNode",
@@ -2316,7 +2490,7 @@
         "kind": "errorNode",
         "name": "stale",
         "code": 29,
-        "message": "The authority invalidated this policy"
+        "message": "The authority invalidated this mandate"
       },
       {
         "kind": "errorNode",
@@ -2328,7 +2502,7 @@
         "kind": "errorNode",
         "name": "inexactAmount",
         "code": 31,
-        "message": "An intent anyone may fill for nothing in return runs for its whole amount, or a stranger could use it up for less"
+        "message": "An authorization anyone may fill for nothing in return runs for its whole amount, or a stranger could use it up for less"
       }
     ],
     "constants": [

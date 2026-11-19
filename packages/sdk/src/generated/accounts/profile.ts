@@ -42,25 +42,25 @@ export function getProfileTagBytes(): ReadonlyUint8Array {
   return getU8Encoder().encode(PROFILE_TAG);
 }
 
-/** An authority's profile: it numbers its policies and holds what invalidates them and its intents. */
+/** An authority's profile: it numbers its mandates and holds what invalidates them and its authorizations. */
 export type Profile = {
   tag: number;
   authority: Address;
-  /** How many policies it has created; they are numbered from 1. */
-  policies: bigint;
-  /** Every policy numbered this or less is invalid. */
+  /** How many mandates it has created; they are numbered from 1. */
+  mandates: bigint;
+  /** Every mandate numbered this or less is invalid. */
   stale: bigint;
-  /** What its intents are signed under. */
+  /** What its authorizations are signed under. */
   nonceIndex: bigint;
 };
 
 export type ProfileArgs = {
   authority: Address;
-  /** How many policies it has created; they are numbered from 1. */
-  policies: number | bigint;
-  /** Every policy numbered this or less is invalid. */
+  /** How many mandates it has created; they are numbered from 1. */
+  mandates: number | bigint;
+  /** Every mandate numbered this or less is invalid. */
   stale: number | bigint;
-  /** What its intents are signed under. */
+  /** What its authorizations are signed under. */
   nonceIndex: number | bigint;
 };
 
@@ -70,7 +70,7 @@ export function getProfileEncoder(): FixedSizeEncoder<ProfileArgs> {
     getStructEncoder([
       ["tag", getU8Encoder()],
       ["authority", getAddressEncoder()],
-      ["policies", getU64Encoder()],
+      ["mandates", getU64Encoder()],
       ["stale", getU64Encoder()],
       ["nonceIndex", getU64Encoder()],
     ]),
@@ -83,7 +83,7 @@ export function getProfileDecoder(): FixedSizeDecoder<Profile> {
   return getStructDecoder([
     ["tag", getU8Decoder()],
     ["authority", getAddressDecoder()],
-    ["policies", getU64Decoder()],
+    ["mandates", getU64Decoder()],
     ["stale", getU64Decoder()],
     ["nonceIndex", getU64Decoder()],
   ]);

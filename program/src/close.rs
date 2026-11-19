@@ -1,6 +1,6 @@
 use crate::events::emit;
 use crate::helpers::close;
-use crate::state::{nonces, policy, profile};
+use crate::state::{mandate, nonces, profile};
 use pinocchio::log::sol_log;
 use pinocchio::sysvars::{clock::Clock, Sysvar};
 use pinocchio::{account_info::AccountInfo, program_error::ProgramError, ProgramResult};
@@ -10,16 +10,16 @@ use pull_core::{constants::*, errors::PullError};
 /// # Close
 ///
 /// Close what can never be used again, and return its rent to whoever paid
-/// it. Anyone may: a policy once it has expired or the authority invalidated
+/// it. Anyone may: a mandate once it has expired or the authority invalidated
 /// it, and a page of nonces once the authority's nonce index has moved on
-/// from the page's. The authority ends a policy that is in force with `Cancel`.
+/// from the page's. The authority ends a mandate that is in force with `Cancel`.
 ///
 /// > Close the account into its payer
 ///
 /// Accounts:
 ///
 /// 1. closer:          [signer]
-/// 2. account:         [mut]           a policy or a page of nonces
+/// 2. account:         [mut]           a mandate or a page of nonces
 /// 3. payer:           [mut]           the recorded payer, receives the rent
 /// 4. profile:                         the authority's
 /// 5. engine:                          event signer
@@ -87,20 +87,20 @@ impl<'a> Close<'a> {
         // SAFETY: nothing else borrows the data; the loaders below check the owner.
         let tag = unsafe { self.account.borrow_data_unchecked() }.first();
         let (allowed, payer) = match tag == Some(&NONCES_TAG) {
-            // Its intents no longer verify, so its bits protect nothing
+            // Its authorizations no longer verify, so its bits protect nothing
             true => {
                 let page = nonces(self.account)?;
                 let current = profile(self.profile, &page.authority)?.nonce_index();
                 (page.index() != current, page.payer)
             }
-            // A policy that can never pull again
+            // A mandate that can never pull again
             false => {
-                let (policy, bytes) = policy(self.account)?;
+                let (mandate, bytes) = mandate(self.account)?;
                 let terms = Terms::decode(bytes)?;
                 let now = Clock::get()?.unix_timestamp;
-                let stale = policy.index() <= profile(self.profile, terms.authority)?.stale();
+                let stale = mandate.index() <= profile(self.profile, terms.authority)?.stale();
                 let expired = terms.not_after.is_some_and(|t| now >= t);
-                (stale || expired, policy.payer)
+                (stale || expired, mandate.payer)
             }
         };
         if !allowed {

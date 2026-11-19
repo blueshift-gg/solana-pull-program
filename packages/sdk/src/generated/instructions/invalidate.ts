@@ -79,12 +79,12 @@ export type InvalidateInstruction<
 
 export type InvalidateInstructionData = {
   discriminator: number;
-  /** 1 for policies, 2 for intents, 3 for both. */
+  /** 1 for mandates, 2 for authorizations, 3 for both. */
   what: number;
 };
 
 export type InvalidateInstructionDataArgs = {
-  /** 1 for policies, 2 for intents, 3 for both. */
+  /** 1 for mandates, 2 for authorizations, 3 for both. */
   what: number;
 };
 

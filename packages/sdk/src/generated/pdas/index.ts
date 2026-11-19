@@ -7,6 +7,6 @@
  */
 
 export * from "./engine.ts";
+export * from "./mandate.ts";
 export * from "./nonces.ts";
-export * from "./policy.ts";
 export * from "./profile.ts";

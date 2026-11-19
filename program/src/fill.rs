@@ -12,10 +12,10 @@ use pull_core::{errors::PullError, Sink};
 
 /// # Fill
 ///
-/// Run a signed intent: terms the authority signed as text, good for one use.
-/// Nothing is stored but one bit, the intent's nonce: intents run in any
+/// Run a signed authorization: terms the authority signed as text, good for one use.
+/// Nothing is stored but one bit, the authorization's nonce: authorizations run in any
 /// order and none can run twice. The text carries the profile's nonce index,
-/// so an intent signed before the authority changed it no longer verifies.
+/// so an authorization signed before the authority changed it no longer verifies.
 /// The authority sends no transaction.
 ///
 /// > Check the window and the spender, and the amount against the limit:

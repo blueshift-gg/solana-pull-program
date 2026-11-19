@@ -6,6 +6,6 @@
  * @see https://github.com/codama-idl/codama
  */
 
+export * from "./mandate.ts";
 export * from "./nonces.ts";
-export * from "./policy.ts";
 export * from "./profile.ts";
