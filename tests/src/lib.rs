@@ -11,7 +11,7 @@ use litesvm_token::{
     get_spl_account, spl_token, Approve, CreateAssociatedTokenAccount, CreateMint, MintTo,
 };
 use pull_core::constants::*;
-use pull_core::terms::{Limit, Receive, Terms};
+use pull_core::terms::{In, Out, Terms};
 use solana_address::Address;
 use solana_clock::Clock;
 use solana_instruction::{AccountMeta, Instruction};
@@ -194,8 +194,8 @@ pub fn encode(terms: &Terms) -> Vec<u8> {
 }
 
 /// "At most `max` may leave `from`", to wherever the spender says.
-pub fn limit(from: &[u8; 32], max: u64, period: Option<u32>) -> Limit<'_> {
-    Limit {
+pub fn out(from: &[u8; 32], max: u64, period: Option<u32>) -> Out<'_> {
+    Out {
         from,
         max,
         period,
@@ -205,19 +205,17 @@ pub fn limit(from: &[u8; 32], max: u64, period: Option<u32>) -> Limit<'_> {
 
 /// Terms valid from `NOW`.
 pub fn terms<'a>(
-    authority: &'a [u8; 32],
     spender: Option<&'a [u8; 32]>,
     not_after: Option<i64>,
-    limit: Limit<'a>,
-    receive: Option<Receive<'a>>,
+    out: Out<'a>,
+    r#in: Option<In<'a>>,
 ) -> Terms<'a> {
     Terms {
-        authority,
         spender,
         not_before: NOW,
         not_after,
-        limit,
-        receive,
+        out,
+        r#in,
     }
 }
 

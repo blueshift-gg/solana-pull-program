@@ -17,47 +17,44 @@ import {
   getStructDecoder,
   getStructEncoder,
   type Address,
-  type FixedSizeCodec,
-  type FixedSizeDecoder,
-  type FixedSizeEncoder,
+  type Codec,
+  type Decoder,
+  type Encoder,
   type Option,
   type OptionOrNullable,
 } from "@solana/kit";
 import {
-  getLimitDecoder,
-  getLimitEncoder,
-  getReceiveDecoder,
-  getReceiveEncoder,
-  type Limit,
-  type LimitArgs,
-  type Receive,
-  type ReceiveArgs,
+  getInDecoder,
+  getInEncoder,
+  getOutDecoder,
+  getOutEncoder,
+  type In,
+  type InArgs,
+  type Out,
+  type OutArgs,
 } from "./index.ts";
 
-/** What an authority permits under a mandate. */
+/** What a mandate permits. Its authority is whoever signs `Create`. */
 export type Terms = {
-  authority: Address;
   /** Who may pull. None is anyone. */
   spender: Option<Address>;
   notBefore: bigint;
   notAfter: Option<bigint>;
-  limit: Limit;
-  receive: Option<Receive>;
+  out: Out;
+  in: Option<In>;
 };
 
 export type TermsArgs = {
-  authority: Address;
   /** Who may pull. None is anyone. */
   spender: OptionOrNullable<Address>;
   notBefore: number | bigint;
   notAfter: OptionOrNullable<number | bigint>;
-  limit: LimitArgs;
-  receive: OptionOrNullable<ReceiveArgs>;
+  out: OutArgs;
+  in: OptionOrNullable<InArgs>;
 };
 
-export function getTermsEncoder(): FixedSizeEncoder<TermsArgs> {
+export function getTermsEncoder(): Encoder<TermsArgs> {
   return getStructEncoder([
-    ["authority", getAddressEncoder()],
     [
       "spender",
       getOptionEncoder(getAddressEncoder(), {
@@ -70,20 +67,13 @@ export function getTermsEncoder(): FixedSizeEncoder<TermsArgs> {
       "notAfter",
       getOptionEncoder(getI64Encoder(), { prefix: null, noneValue: "zeroes" }),
     ],
-    ["limit", getLimitEncoder()],
-    [
-      "receive",
-      getOptionEncoder(getReceiveEncoder(), {
-        prefix: null,
-        noneValue: "zeroes",
-      }),
-    ],
+    ["out", getOutEncoder()],
+    ["in", getOptionEncoder(getInEncoder(), { prefix: null })],
   ]);
 }
 
-export function getTermsDecoder(): FixedSizeDecoder<Terms> {
+export function getTermsDecoder(): Decoder<Terms> {
   return getStructDecoder([
-    ["authority", getAddressDecoder()],
     [
       "spender",
       getOptionDecoder(getAddressDecoder(), {
@@ -96,17 +86,11 @@ export function getTermsDecoder(): FixedSizeDecoder<Terms> {
       "notAfter",
       getOptionDecoder(getI64Decoder(), { prefix: null, noneValue: "zeroes" }),
     ],
-    ["limit", getLimitDecoder()],
-    [
-      "receive",
-      getOptionDecoder(getReceiveDecoder(), {
-        prefix: null,
-        noneValue: "zeroes",
-      }),
-    ],
+    ["out", getOutDecoder()],
+    ["in", getOptionDecoder(getInDecoder(), { prefix: null })],
   ]);
 }
 
-export function getTermsCodec(): FixedSizeCodec<TermsArgs, Terms> {
+export function getTermsCodec(): Codec<TermsArgs, Terms> {
   return combineCodec(getTermsEncoder(), getTermsDecoder());
 }

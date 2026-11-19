@@ -12,7 +12,7 @@
         "kind": "accountNode",
         "name": "mandate",
         "docs": [
-          "A standing permission on chain: this header, then its terms."
+          "A standing permission on chain: who it is from, how much of the limit is used, then its terms."
         ],
         "data": {
           "kind": "structTypeNode",
@@ -33,23 +33,12 @@
             },
             {
               "kind": "structFieldTypeNode",
-              "name": "rolled",
+              "name": "authority",
               "docs": [
-                "When `consumed` was last written."
+                "Signed `Create`; must own the account the terms take from."
               ],
               "type": {
-                "kind": "numberTypeNode",
-                "format": "i64",
-                "endian": "le"
-              }
-            },
-            {
-              "kind": "structFieldTypeNode",
-              "name": "consumed",
-              "type": {
-                "kind": "numberTypeNode",
-                "format": "u64",
-                "endian": "le"
+                "kind": "publicKeyTypeNode"
               }
             },
             {
@@ -67,6 +56,30 @@
               "name": "index",
               "docs": [
                 "Its number among the authority's mandates."
+              ],
+              "type": {
+                "kind": "numberTypeNode",
+                "format": "u64",
+                "endian": "le"
+              }
+            },
+            {
+              "kind": "structFieldTypeNode",
+              "name": "consumed",
+              "docs": [
+                "What the limit has used in `window`."
+              ],
+              "type": {
+                "kind": "numberTypeNode",
+                "format": "u64",
+                "endian": "le"
+              }
+            },
+            {
+              "kind": "structFieldTypeNode",
+              "name": "window",
+              "docs": [
+                "The window `consumed` counts: windows of the period from `notBefore`, or always 0 for a limit in total."
               ],
               "type": {
                 "kind": "numberTypeNode",
@@ -845,7 +858,7 @@
     "definedTypes": [
       {
         "kind": "definedTypeNode",
-        "name": "limit",
+        "name": "out",
         "docs": [
           "What may go out: at most `max` may leave `from`, a token account of the authority, in its mint."
         ],
@@ -857,6 +870,19 @@
               "name": "from",
               "type": {
                 "kind": "publicKeyTypeNode"
+              }
+            },
+            {
+              "kind": "structFieldTypeNode",
+              "name": "to",
+              "docs": [
+                "The only token account the tokens may go to. None leaves it to the spender."
+              ],
+              "type": {
+                "kind": "zeroableOptionTypeNode",
+                "item": {
+                  "kind": "publicKeyTypeNode"
+                }
               }
             },
             {
@@ -885,28 +911,15 @@
                   }
                 }
               }
-            },
-            {
-              "kind": "structFieldTypeNode",
-              "name": "to",
-              "docs": [
-                "The only token account the tokens may go to. None leaves it to the spender."
-              ],
-              "type": {
-                "kind": "zeroableOptionTypeNode",
-                "item": {
-                  "kind": "publicKeyTypeNode"
-                }
-              }
             }
           ]
         }
       },
       {
         "kind": "definedTypeNode",
-        "name": "receive",
+        "name": "in",
         "docs": [
-          "What must come in: each use, at least `min` arrives in `to`, a token account of the authority, in its mint."
+          "What must come back: each pull, at least `min` arrives in `to`, a token account of the authority, in its mint."
         ],
         "type": {
           "kind": "structTypeNode",
@@ -934,18 +947,11 @@
         "kind": "definedTypeNode",
         "name": "terms",
         "docs": [
-          "What an authority permits under a mandate."
+          "What a mandate permits. Its authority is whoever signs `Create`."
         ],
         "type": {
           "kind": "structTypeNode",
           "fields": [
-            {
-              "kind": "structFieldTypeNode",
-              "name": "authority",
-              "type": {
-                "kind": "publicKeyTypeNode"
-              }
-            },
             {
               "kind": "structFieldTypeNode",
               "name": "spender",
@@ -988,20 +994,20 @@
             },
             {
               "kind": "structFieldTypeNode",
-              "name": "limit",
+              "name": "out",
               "type": {
                 "kind": "definedTypeLinkNode",
-                "name": "limit"
+                "name": "out"
               }
             },
             {
               "kind": "structFieldTypeNode",
-              "name": "receive",
+              "name": "in",
               "type": {
-                "kind": "zeroableOptionTypeNode",
+                "kind": "remainderOptionTypeNode",
                 "item": {
                   "kind": "definedTypeLinkNode",
-                  "name": "receive"
+                  "name": "in"
                 }
               }
             }
@@ -1448,116 +1454,110 @@
       },
       {
         "kind": "errorNode",
-        "name": "invalidAuthority",
-        "code": 9,
-        "message": "The signer is not the terms' authority"
-      },
-      {
-        "kind": "errorNode",
         "name": "notYetValid",
-        "code": 10,
+        "code": 9,
         "message": "The terms' window has not opened"
       },
       {
         "kind": "errorNode",
         "name": "expired",
-        "code": 11,
+        "code": 10,
         "message": "The terms' window has closed"
       },
       {
         "kind": "errorNode",
         "name": "invalidSpender",
-        "code": 12,
+        "code": 11,
         "message": "The signer is not the terms' spender"
       },
       {
         "kind": "errorNode",
         "name": "notClosable",
-        "code": 13,
+        "code": 12,
         "message": "A mandate that can still pull: only its authority closes it"
       },
       {
         "kind": "errorNode",
         "name": "invalidPayer",
-        "code": 14,
+        "code": 13,
         "message": "The account is not the one that paid the rent being refunded"
       },
       {
         "kind": "errorNode",
         "name": "invalidPull",
-        "code": 15,
+        "code": 14,
         "message": "The account pulled from is not the one the terms limit"
       },
       {
         "kind": "errorNode",
         "name": "limitExceeded",
-        "code": 16,
+        "code": 15,
         "message": "The pull exceeds the limit"
       },
       {
         "kind": "errorNode",
         "name": "invalidTarget",
-        "code": 17,
+        "code": 16,
         "message": "A token account or mint is not the one the terms name, or not the authority's"
       },
       {
         "kind": "errorNode",
         "name": "overflow",
-        "code": 18,
+        "code": 17,
         "message": "An amount overflowed"
       },
       {
         "kind": "errorNode",
         "name": "notReceived",
-        "code": 19,
+        "code": 18,
         "message": "The authority received less than the terms require"
       },
       {
         "kind": "errorNode",
         "name": "invalidEventAuthority",
-        "code": 20,
+        "code": 19,
         "message": "Only the engine PDA may invoke the event instruction"
       },
       {
         "kind": "errorNode",
         "name": "notDelegate",
-        "code": 21,
+        "code": 20,
         "message": "The engine is not the delegate of the account pulled from: it was never enabled, another `Approve` replaced it, or its approval ran out"
       },
       {
         "kind": "errorNode",
         "name": "allowanceExceeded",
-        "code": 22,
+        "code": 21,
         "message": "The pull exceeds what is left of the account's approval"
       },
       {
         "kind": "errorNode",
         "name": "insufficientFunds",
-        "code": 23,
+        "code": 22,
         "message": "The account pulled from holds less than the pull"
       },
       {
         "kind": "errorNode",
         "name": "invalidProfile",
-        "code": 24,
+        "code": 23,
         "message": "The account is not the authority's profile, or the authority has none"
       },
       {
         "kind": "errorNode",
         "name": "stale",
-        "code": 25,
+        "code": 24,
         "message": "The authority invalidated this mandate"
       },
       {
         "kind": "errorNode",
         "name": "invalidDestination",
-        "code": 26,
+        "code": 25,
         "message": "The tokens would not go to the account the terms name"
       },
       {
         "kind": "errorNode",
         "name": "zeroAmount",
-        "code": 27,
+        "code": 26,
         "message": "A pull must take something"
       }
     ],

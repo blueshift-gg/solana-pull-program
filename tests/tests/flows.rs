@@ -1,8 +1,9 @@
 #![allow(clippy::result_large_err)] // LiteSVM's own result type
 
+use litesvm_token::{spl_token::instruction::AuthorityType, SetAuthority};
 use pull_core::constants::*;
 use pull_core::errors::PullError;
-use pull_core::terms::Receive;
+use pull_core::terms::In;
 use pull_tests::*;
 use solana_address::Address;
 use solana_signer::Signer;
@@ -21,12 +22,12 @@ fn subscription_is_one_instruction_and_resets_each_period() {
     let mut f = Fixture::new();
     let user = f.wallet(100 * USDC, 0);
     let (merchant, stranger) = (f.wallet(0, 0), f.wallet(0, 0));
-    let (u, m) = (user.address().to_bytes(), merchant.address().to_bytes());
+    let m = merchant.address().to_bytes();
     let user_usdc = user.usdc.to_bytes();
 
     // The merchant may take at most 10 USDC every 30 days, until revoked
-    let limits = limit(&user_usdc, 10 * USDC, MONTHLY);
-    let bytes = encode(&terms(&u, Some(&m), None, limits, None));
+    let limits = out(&user_usdc, 10 * USDC, MONTHLY);
+    let bytes = encode(&terms(Some(&m), None, limits, None));
     let create = create(&user.address(), &user.address(), 1, &bytes);
     f.send(&[create], &[&user.key]).unwrap();
 
@@ -70,11 +71,11 @@ fn a_program_collects_a_subscription_by_cpi() {
     let mut f = Fixture::new();
     let user = f.wallet(100 * USDC, 0);
     let merchant = f.wallet(0, 0);
-    let (u, m) = (user.address().to_bytes(), merchant.address().to_bytes());
+    let m = merchant.address().to_bytes();
     let user_usdc = user.usdc.to_bytes();
 
-    let limits = limit(&user_usdc, 10 * USDC, MONTHLY);
-    let bytes = encode(&terms(&u, Some(&m), None, limits, None));
+    let limits = out(&user_usdc, 10 * USDC, MONTHLY);
+    let bytes = encode(&terms(Some(&m), None, limits, None));
     let create = create(&user.address(), &user.address(), 1, &bytes);
     f.send(&[create], &[&user.key]).unwrap();
 
@@ -104,13 +105,13 @@ fn the_owner_ends_every_mandate_at_once_and_they_close() {
     let user = f.wallet(100 * USDC, 0);
     let (merchant, other) = (f.wallet(0, 0), f.wallet(0, 0));
     let (sponsor, stranger) = (f.payer(), f.payer());
-    let (u, m) = (user.address().to_bytes(), merchant.address().to_bytes());
+    let m = merchant.address().to_bytes();
     let user_usdc = user.usdc.to_bytes();
     let (owner, payer) = (user.address(), sponsor.pubkey());
 
     // Mandates are numbered as they are created: 1, 2, 3
-    let limits = limit(&user_usdc, USDC, MONTHLY);
-    let bytes = encode(&terms(&u, Some(&m), None, limits, None));
+    let limits = out(&user_usdc, USDC, MONTHLY);
+    let bytes = encode(&terms(Some(&m), None, limits, None));
     for index in 1..=3 {
         // A mandate cannot take a number out of turn
         let skip = create(&owner, &payer, index + 1, &bytes);
@@ -181,16 +182,16 @@ fn closing_a_mandate_returns_the_rent_at_once() {
     let mut f = Fixture::new();
     let user = f.wallet(10 * USDC, 0);
     let (merchant, sponsor, stranger) = (f.wallet(0, 0), f.payer(), f.payer());
-    let (u, m) = (user.address().to_bytes(), merchant.address().to_bytes());
+    let m = merchant.address().to_bytes();
     let user_usdc = user.usdc.to_bytes();
     let (owner, payer) = (user.address(), sponsor.pubkey());
 
     // The user signs the transaction; a sponsor pays the fee and the rent.
     // One mandate never expires, the other does
-    let limits = limit(&user_usdc, USDC, MONTHLY);
+    let limits = out(&user_usdc, USDC, MONTHLY);
     let mandates = [mandate_pda(&owner, 1), mandate_pda(&owner, 2)];
     for (index, not_after) in [(1, None), (2, Some(NOW + 365 * DAY))] {
-        let bytes = encode(&terms(&u, Some(&m), not_after, limits, None));
+        let bytes = encode(&terms(Some(&m), not_after, limits, None));
         let create = create(&owner, &payer, index, &bytes);
         f.send(&[create], &[&sponsor, &user.key]).unwrap();
     }
@@ -230,17 +231,16 @@ fn dca_runs_once_a_day_for_anyone_who_delivers() {
     let mut f = Fixture::new();
     let user = f.wallet(100 * USDC, 0);
     let (first, second) = (f.wallet(0, 10 * SOL), f.wallet(0, 10 * SOL));
-    let u = user.address().to_bytes();
     let (user_usdc, user_sol) = (user.usdc.to_bytes(), user.sol.to_bytes());
     let owner = user.address();
 
     // Out: at most 10 USDC every day, to anyone. In: at least 0.05 SOL each time
-    let limits = limit(&user_usdc, 10 * USDC, Some(DAY as u32));
-    let receive = Receive {
+    let limits = out(&user_usdc, 10 * USDC, Some(DAY as u32));
+    let receive = In {
         to: &user_sol,
         min: 50_000_000,
     };
-    let bytes = encode(&terms(&u, None, None, limits, Some(receive)));
+    let bytes = encode(&terms(None, None, limits, Some(receive)));
     f.send(&[create(&owner, &owner, 1, &bytes)], &[&user.key])
         .unwrap();
 
@@ -274,8 +274,8 @@ fn a_mandate_reaches_only_its_authoritys_accounts() {
     let victim_usdc = victim.usdc.to_bytes();
 
     // The engine is the victim's delegate too, but this mandate is the thief's
-    let limits = limit(&victim_usdc, 100 * USDC, None);
-    let bytes = encode(&terms(&t, Some(&t), None, limits, None));
+    let limits = out(&victim_usdc, 100 * USDC, None);
+    let bytes = encode(&terms(Some(&t), None, limits, None));
     let key = thief.address();
     f.send(&[create(&key, &key, 1, &bytes)], &[&thief.key])
         .unwrap();
@@ -286,6 +286,40 @@ fn a_mandate_reaches_only_its_authoritys_accounts() {
         PullError::InvalidTarget
     ));
     assert_eq!(f.balance(&victim.usdc), 100 * USDC);
+
+    // A mandate stays with the owner that signed it, not with the account: the
+    // victim's mandate does not follow its account to a new owner, even once
+    // the new owner enables the account for mandates of its own
+    let bytes = encode(&terms(
+        Some(&t),
+        None,
+        out(&victim_usdc, 100 * USDC, None),
+        None,
+    ));
+    let owner = victim.address();
+    f.send(&[create(&owner, &owner, 1, &bytes)], &[&victim.key])
+        .unwrap();
+    let pull_victims = |f: &mut Fixture| {
+        let ix = pull(&key, &owner, 1, accounts, USDC, None, TOKEN);
+        f.send(&[ix], &[&thief.key])
+    };
+    pull_victims(&mut f).unwrap();
+    let heir = f.wallet(0, 0);
+    SetAuthority::new(
+        &mut f.svm,
+        &victim.key,
+        &victim.usdc,
+        AuthorityType::AccountOwner,
+    )
+    .new_authority(&heir.address())
+    .send()
+    .unwrap();
+    // The token program takes the delegate away with the old owner
+    assert_eq!(f.allowance(&victim.usdc), 0);
+    assert!(refused(pull_victims(&mut f), PullError::InvalidTarget));
+    f.enable(&heir, &victim.usdc, u64::MAX);
+    assert!(refused(pull_victims(&mut f), PullError::InvalidTarget));
+    assert_eq!(f.balance(&victim.usdc), 99 * USDC);
 }
 
 /// The owner names where the money goes. Then whoever holds the spender's
@@ -295,14 +329,14 @@ fn terms_that_name_a_destination_pay_only_there() {
     let mut f = Fixture::new();
     let user = f.wallet(100 * USDC, 0);
     let (relayer, payee, thief) = (f.wallet(0, 0), f.wallet(0, 0), f.wallet(0, 0));
-    let (u, r) = (user.address().to_bytes(), relayer.address().to_bytes());
+    let r = relayer.address().to_bytes();
     let (user_usdc, payee_usdc) = (user.usdc.to_bytes(), payee.usdc.to_bytes());
     let owner = user.address();
 
     // A mandate: the relayer may move 10 USDC a month, only to the payee
-    let mut limits = limit(&user_usdc, 10 * USDC, MONTHLY);
+    let mut limits = out(&user_usdc, 10 * USDC, MONTHLY);
     limits.to = Some(&payee_usdc);
-    let bytes = encode(&terms(&u, Some(&r), None, limits, None));
+    let bytes = encode(&terms(Some(&r), None, limits, None));
     f.send(&[create(&owner, &owner, 1, &bytes)], &[&user.key])
         .unwrap();
     let key = relayer.address();
@@ -317,9 +351,9 @@ fn terms_that_name_a_destination_pay_only_there() {
     f.send(&[ix], &[&relayer.key]).unwrap();
 
     // A mandate with no spender: anyone lands the payout, and it still goes to the payee
-    let mut limits = limit(&user_usdc, 50 * USDC, None);
+    let mut limits = out(&user_usdc, 50 * USDC, None);
     limits.to = Some(&payee_usdc);
-    let bytes = encode(&terms(&u, None, None, limits, None));
+    let bytes = encode(&terms(None, None, limits, None));
     f.send(&[create(&owner, &owner, 2, &bytes)], &[&user.key])
         .unwrap();
     let stolen = (user.usdc, f.usdc, thief.usdc);
@@ -356,16 +390,10 @@ fn the_payer_of_a_mandate_signed_for_it() {
     let mut f = Fixture::new();
     let user = f.wallet(10 * USDC, 0);
     let merchant = f.wallet(0, 0);
-    let (u, m) = (user.address().to_bytes(), merchant.address().to_bytes());
+    let m = merchant.address().to_bytes();
     let user_usdc = user.usdc.to_bytes();
     let owner = user.address();
-    let bytes = encode(&terms(
-        &u,
-        Some(&m),
-        None,
-        limit(&user_usdc, USDC, MONTHLY),
-        None,
-    ));
+    let bytes = encode(&terms(Some(&m), None, out(&user_usdc, USDC, MONTHLY), None));
 
     // The address holds its rent already, so no transfer needs the payer
     let mandate = mandate_pda(&owner, 1);
@@ -389,11 +417,7 @@ fn substituted_accounts_are_refused() {
     let mut f = Fixture::new();
     let (victim, thief) = (f.wallet(100 * USDC, 0), f.wallet(100 * USDC, 10 * SOL));
     let user = f.wallet(100 * USDC, 0);
-    let (t, u, usdc) = (
-        thief.address().to_bytes(),
-        user.address().to_bytes(),
-        f.usdc.to_bytes(),
-    );
+    let (t, usdc) = (thief.address().to_bytes(), f.usdc.to_bytes());
     let (victim_usdc, user_usdc, user_sol) = (
         victim.usdc.to_bytes(),
         user.usdc.to_bytes(),
@@ -403,7 +427,7 @@ fn substituted_accounts_are_refused() {
     let take = (user.usdc, f.usdc, thief.usdc);
 
     // A mandate the thief creates for the victim's account, under its own profile
-    let stolen = terms(&t, Some(&t), None, limit(&victim_usdc, USDC, None), None);
+    let stolen = terms(Some(&t), None, out(&victim_usdc, USDC, None), None);
     f.send(&[create(&key, &key, 1, &encode(&stolen))], &[&thief.key])
         .unwrap();
     let from_victim = (victim.usdc, f.usdc, thief.usdc);
@@ -428,7 +452,7 @@ fn substituted_accounts_are_refused() {
     f.svm.set_account(fake, account).unwrap();
     let fake_key = fake.to_bytes();
     let mut forged = stolen;
-    forged.limit.from = &fake_key;
+    forged.out.from = &fake_key;
     f.send(&[create(&key, &key, 2, &encode(&forged))], &[&thief.key])
         .unwrap();
     let from_fake = (fake, f.usdc, thief.usdc);
@@ -439,12 +463,12 @@ fn substituted_accounts_are_refused() {
     ));
 
     // The user sells 10 USDC for 1 SOL, to anyone
-    let receive = Receive {
+    let receive = In {
         to: &user_sol,
         min: SOL,
     };
-    let limits = limit(&user_usdc, 20 * USDC, None);
-    let order = encode(&terms(&u, None, None, limits, Some(receive)));
+    let limits = out(&user_usdc, 20 * USDC, None);
+    let order = encode(&terms(None, None, limits, Some(receive)));
     f.send(&[create(&owner, &owner, 1, &order)], &[&user.key])
         .unwrap();
     let pull_with = |f: &mut Fixture, change: &dyn Fn(&mut solana_instruction::Instruction)| {
@@ -500,11 +524,11 @@ fn a_refused_pull_names_its_cause() {
     let mut f = Fixture::new();
     let user = f.fresh_wallet(100 * USDC, 0);
     let merchant = f.wallet(0, 0);
-    let (u, m) = (user.address().to_bytes(), merchant.address().to_bytes());
+    let m = merchant.address().to_bytes();
     let user_usdc = user.usdc.to_bytes();
 
-    let limits = limit(&user_usdc, 1_000 * USDC, None);
-    let bytes = encode(&terms(&u, Some(&m), None, limits, None));
+    let limits = out(&user_usdc, 1_000 * USDC, None);
+    let bytes = encode(&terms(Some(&m), None, limits, None));
     let create = create(&user.address(), &user.address(), 1, &bytes);
     f.send(&[create], &[&user.key]).unwrap();
 
@@ -541,11 +565,11 @@ fn a_pull_carries_the_spenders_reference() {
     let mut f = Fixture::new();
     let user = f.wallet(100 * USDC, 0);
     let merchant = f.wallet(0, 0);
-    let (u, m) = (user.address().to_bytes(), merchant.address().to_bytes());
+    let m = merchant.address().to_bytes();
     let user_usdc = user.usdc.to_bytes();
 
-    let limits = limit(&user_usdc, 10 * USDC, MONTHLY);
-    let bytes = encode(&terms(&u, Some(&m), None, limits, None));
+    let limits = out(&user_usdc, 10 * USDC, MONTHLY);
+    let bytes = encode(&terms(Some(&m), None, limits, None));
     let create = create(&user.address(), &user.address(), 1, &bytes);
     f.send(&[create], &[&user.key]).unwrap();
 
@@ -612,13 +636,13 @@ fn a_fee_token_never_shorts_the_authority() {
         let data = f.svm.get_account(account).unwrap().data;
         u64::from_le_bytes(data[64..72].try_into().unwrap())
     };
-    let (u, m) = (owner.to_bytes(), merchant.address().to_bytes());
+    let m = merchant.address().to_bytes();
     let (user_fee_key, user_usdc) = (user_fee.to_bytes(), user.usdc.to_bytes());
     let spender = merchant.address();
 
     // Taking the fee token: the user gives up exactly the limit, the merchant gets it less the fee
-    let limits = limit(&user_fee_key, 10 * USDC, MONTHLY);
-    let bytes = encode(&terms(&u, Some(&m), None, limits, None));
+    let limits = out(&user_fee_key, 10 * USDC, MONTHLY);
+    let bytes = encode(&terms(Some(&m), None, limits, None));
     f.send(&[create(&owner, &owner, 1, &bytes)], &[&user.key])
         .unwrap();
     let accounts = (user_fee, mint, merchant_fee);
@@ -628,12 +652,12 @@ fn a_fee_token_never_shorts_the_authority() {
     assert_eq!(held(&f, &merchant_fee), 110 * USDC - USDC / 10);
 
     // Receiving the fee token: what arrives is short, so the pull is refused
-    let limits = limit(&user_usdc, 10 * USDC, None);
-    let receive = Receive {
+    let limits = out(&user_usdc, 10 * USDC, None);
+    let receive = In {
         to: &user_fee_key,
         min: 10 * USDC,
     };
-    let bytes = encode(&terms(&u, None, None, limits, Some(receive)));
+    let bytes = encode(&terms(None, None, limits, Some(receive)));
     f.send(&[create(&owner, &owner, 2, &bytes)], &[&user.key])
         .unwrap();
     let take = (user.usdc, f.usdc, merchant.usdc);
@@ -668,7 +692,7 @@ fn random_pulls_never_pass_a_limit() {
     let mut f = Fixture::new();
     let user = f.wallet(u64::MAX / 2, 0);
     let merchant = f.wallet(0, 0);
-    let (u, m) = (user.address().to_bytes(), merchant.address().to_bytes());
+    let m = merchant.address().to_bytes();
     let user_usdc = user.usdc.to_bytes();
     let (mut now, mut paid) = (NOW, 0u64);
     let (mut accepted_count, mut refused_count) = (0, 0);
@@ -679,10 +703,10 @@ fn random_pulls_never_pass_a_limit() {
             0 => None,
             _ => Some(1 + random(1_000) as u32),
         };
-        let limits = limit(&user_usdc, 1 + random(1_000), per);
+        let limits = out(&user_usdc, 1 + random(1_000), per);
         // Windows count from the start of the terms, which is not when they are created
         let start = now - random(5_000) as i64;
-        let mut terms = terms(&u, Some(&m), None, limits, None);
+        let mut terms = terms(Some(&m), None, limits, None);
         terms.not_before = start;
         let bytes = encode(&terms);
         let create = create(&user.address(), &user.address(), n + 1, &bytes);

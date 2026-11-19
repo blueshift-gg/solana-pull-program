@@ -86,13 +86,13 @@ impl<'a> Close<'a> {
         let (mandate, bytes) = mandate(self.mandate)?;
         let terms = Terms::decode(bytes)?;
         // Its authority ends it at any time; anyone ends one that can never pull again
-        if terms.authority.ne(closer) {
+        if mandate.authority.ne(closer) {
             let now = Clock::get()?.unix_timestamp;
             let expired = terms.not_after.is_some_and(|t| now >= t);
-            let used_up = terms.limit.period.is_none() && mandate.consumed() >= terms.limit.max;
+            let used_up = terms.out.period.is_none() && mandate.consumed() >= terms.out.max;
             if !expired
                 && !used_up
-                && mandate.index() > profile(self.profile, terms.authority)?.stale()
+                && mandate.index() > profile(self.profile, &mandate.authority)?.stale()
             {
                 return Err(PullError::NotClosable.into());
             }

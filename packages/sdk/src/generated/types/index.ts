@@ -6,6 +6,6 @@
  * @see https://github.com/codama-idl/codama
  */
 
-export * from "./limit.ts";
-export * from "./receive.ts";
+export * from "./in.ts";
+export * from "./out.ts";
 export * from "./terms.ts";

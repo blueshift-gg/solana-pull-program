@@ -23,25 +23,24 @@ export const SOLANA_PULL_ERROR__INVALID_SEEDS = 0x5; // 5
 export const SOLANA_PULL_ERROR__ALREADY_INITIALIZED = 0x6; // 6
 export const SOLANA_PULL_ERROR__MALFORMED_TERMS = 0x7; // 7
 export const SOLANA_PULL_ERROR__INVALID_TERMS = 0x8; // 8
-export const SOLANA_PULL_ERROR__INVALID_AUTHORITY = 0x9; // 9
-export const SOLANA_PULL_ERROR__NOT_YET_VALID = 0xa; // 10
-export const SOLANA_PULL_ERROR__EXPIRED = 0xb; // 11
-export const SOLANA_PULL_ERROR__INVALID_SPENDER = 0xc; // 12
-export const SOLANA_PULL_ERROR__NOT_CLOSABLE = 0xd; // 13
-export const SOLANA_PULL_ERROR__INVALID_PAYER = 0xe; // 14
-export const SOLANA_PULL_ERROR__INVALID_PULL = 0xf; // 15
-export const SOLANA_PULL_ERROR__LIMIT_EXCEEDED = 0x10; // 16
-export const SOLANA_PULL_ERROR__INVALID_TARGET = 0x11; // 17
-export const SOLANA_PULL_ERROR__OVERFLOW = 0x12; // 18
-export const SOLANA_PULL_ERROR__NOT_RECEIVED = 0x13; // 19
-export const SOLANA_PULL_ERROR__INVALID_EVENT_AUTHORITY = 0x14; // 20
-export const SOLANA_PULL_ERROR__NOT_DELEGATE = 0x15; // 21
-export const SOLANA_PULL_ERROR__ALLOWANCE_EXCEEDED = 0x16; // 22
-export const SOLANA_PULL_ERROR__INSUFFICIENT_FUNDS = 0x17; // 23
-export const SOLANA_PULL_ERROR__INVALID_PROFILE = 0x18; // 24
-export const SOLANA_PULL_ERROR__STALE = 0x19; // 25
-export const SOLANA_PULL_ERROR__INVALID_DESTINATION = 0x1a; // 26
-export const SOLANA_PULL_ERROR__ZERO_AMOUNT = 0x1b; // 27
+export const SOLANA_PULL_ERROR__NOT_YET_VALID = 0x9; // 9
+export const SOLANA_PULL_ERROR__EXPIRED = 0xa; // 10
+export const SOLANA_PULL_ERROR__INVALID_SPENDER = 0xb; // 11
+export const SOLANA_PULL_ERROR__NOT_CLOSABLE = 0xc; // 12
+export const SOLANA_PULL_ERROR__INVALID_PAYER = 0xd; // 13
+export const SOLANA_PULL_ERROR__INVALID_PULL = 0xe; // 14
+export const SOLANA_PULL_ERROR__LIMIT_EXCEEDED = 0xf; // 15
+export const SOLANA_PULL_ERROR__INVALID_TARGET = 0x10; // 16
+export const SOLANA_PULL_ERROR__OVERFLOW = 0x11; // 17
+export const SOLANA_PULL_ERROR__NOT_RECEIVED = 0x12; // 18
+export const SOLANA_PULL_ERROR__INVALID_EVENT_AUTHORITY = 0x13; // 19
+export const SOLANA_PULL_ERROR__NOT_DELEGATE = 0x14; // 20
+export const SOLANA_PULL_ERROR__ALLOWANCE_EXCEEDED = 0x15; // 21
+export const SOLANA_PULL_ERROR__INSUFFICIENT_FUNDS = 0x16; // 22
+export const SOLANA_PULL_ERROR__INVALID_PROFILE = 0x17; // 23
+export const SOLANA_PULL_ERROR__STALE = 0x18; // 24
+export const SOLANA_PULL_ERROR__INVALID_DESTINATION = 0x19; // 25
+export const SOLANA_PULL_ERROR__ZERO_AMOUNT = 0x1a; // 26
 
 export type SolanaPullError =
   | typeof SOLANA_PULL_ERROR__ALLOWANCE_EXCEEDED
@@ -50,7 +49,6 @@ export type SolanaPullError =
   | typeof SOLANA_PULL_ERROR__INSUFFICIENT_FUNDS
   | typeof SOLANA_PULL_ERROR__INVALID_ACCOUNT_LENGTH
   | typeof SOLANA_PULL_ERROR__INVALID_ACCOUNT_OWNER
-  | typeof SOLANA_PULL_ERROR__INVALID_AUTHORITY
   | typeof SOLANA_PULL_ERROR__INVALID_DESTINATION
   | typeof SOLANA_PULL_ERROR__INVALID_EVENT_AUTHORITY
   | typeof SOLANA_PULL_ERROR__INVALID_PAYER
@@ -82,7 +80,6 @@ if (process.env["NODE_ENV"] !== "production") {
     [SOLANA_PULL_ERROR__INSUFFICIENT_FUNDS]: `The account pulled from holds less than the pull`,
     [SOLANA_PULL_ERROR__INVALID_ACCOUNT_LENGTH]: `The account data length is not the expected one`,
     [SOLANA_PULL_ERROR__INVALID_ACCOUNT_OWNER]: `Account expected to be owned by this program`,
-    [SOLANA_PULL_ERROR__INVALID_AUTHORITY]: `The signer is not the terms' authority`,
     [SOLANA_PULL_ERROR__INVALID_DESTINATION]: `The tokens would not go to the account the terms name`,
     [SOLANA_PULL_ERROR__INVALID_EVENT_AUTHORITY]: `Only the engine PDA may invoke the event instruction`,
     [SOLANA_PULL_ERROR__INVALID_PAYER]: `The account is not the one that paid the rent being refunded`,

@@ -20,25 +20,25 @@ import {
   type FixedSizeEncoder,
 } from "@solana/kit";
 
-/** What must come in: each use, at least `min` arrives in `to`, a token account of the authority, in its mint. */
-export type Receive = { to: Address; min: bigint };
+/** What must come back: each pull, at least `min` arrives in `to`, a token account of the authority, in its mint. */
+export type In = { to: Address; min: bigint };
 
-export type ReceiveArgs = { to: Address; min: number | bigint };
+export type InArgs = { to: Address; min: number | bigint };
 
-export function getReceiveEncoder(): FixedSizeEncoder<ReceiveArgs> {
+export function getInEncoder(): FixedSizeEncoder<InArgs> {
   return getStructEncoder([
     ["to", getAddressEncoder()],
     ["min", getU64Encoder()],
   ]);
 }
 
-export function getReceiveDecoder(): FixedSizeDecoder<Receive> {
+export function getInDecoder(): FixedSizeDecoder<In> {
   return getStructDecoder([
     ["to", getAddressDecoder()],
     ["min", getU64Decoder()],
   ]);
 }
 
-export function getReceiveCodec(): FixedSizeCodec<ReceiveArgs, Receive> {
-  return combineCodec(getReceiveEncoder(), getReceiveDecoder());
+export function getInCodec(): FixedSizeCodec<InArgs, In> {
+  return combineCodec(getInEncoder(), getInDecoder());
 }

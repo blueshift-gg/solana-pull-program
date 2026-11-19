@@ -22,7 +22,7 @@ export async function subscription() {
     // The site builds one transaction: enable USDC, open the profile, create the mandate.
     // The merchant sponsors the fee and the rent; the reader only signs
     const start = await now();
-    const plan = { authority: reader.address, limit: { from: account, max: 8_000_000n, period: 2_592_000, to: treasury }, notAfter: null, notBefore: start, receive: null, spender: merchant.address };
+    const plan = { out: { from: account, max: 8_000_000n, period: 2_592_000, to: treasury }, notAfter: null, notBefore: start, in: null, spender: merchant.address };
     const { instructions, mandate } = await onboardInstructions(rpc, { authority: reader, payer: sponsor, terms: plan });
     // What the reader's wallet shows for it: it knows its own USDC account
     const shown = instructions.map((ix) => describeInstruction(ix, { [account]: TOKENS[USDC] }));

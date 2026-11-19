@@ -15,8 +15,6 @@ import {
   fetchEncodedAccounts,
   getAddressDecoder,
   getAddressEncoder,
-  getI64Decoder,
-  getI64Encoder,
   getStructDecoder,
   getStructEncoder,
   getU64Decoder,
@@ -26,12 +24,12 @@ import {
   transformEncoder,
   type Account,
   type Address,
+  type Codec,
+  type Decoder,
   type EncodedAccount,
+  type Encoder,
   type FetchAccountConfig,
   type FetchAccountsConfig,
-  type FixedSizeCodec,
-  type FixedSizeDecoder,
-  type FixedSizeEncoder,
   type MaybeAccount,
   type MaybeEncodedAccount,
   type ReadonlyUint8Array,
@@ -50,39 +48,46 @@ export function getMandateTagBytes(): ReadonlyUint8Array {
   return getU8Encoder().encode(MANDATE_TAG);
 }
 
-/** A standing permission on chain: this header, then its terms. */
+/** A standing permission on chain: who it is from, how much of the limit is used, then its terms. */
 export type Mandate = {
   tag: number;
-  /** When `consumed` was last written. */
-  rolled: bigint;
-  consumed: bigint;
+  /** Signed `Create`; must own the account the terms take from. */
+  authority: Address;
   /** Paid the rent; it goes back there. */
   payer: Address;
   /** Its number among the authority's mandates. */
   index: bigint;
+  /** What the limit has used in `window`. */
+  consumed: bigint;
+  /** The window `consumed` counts: windows of the period from `notBefore`, or always 0 for a limit in total. */
+  window: bigint;
   terms: Terms;
 };
 
 export type MandateArgs = {
-  /** When `consumed` was last written. */
-  rolled: number | bigint;
-  consumed: number | bigint;
+  /** Signed `Create`; must own the account the terms take from. */
+  authority: Address;
   /** Paid the rent; it goes back there. */
   payer: Address;
   /** Its number among the authority's mandates. */
   index: number | bigint;
+  /** What the limit has used in `window`. */
+  consumed: number | bigint;
+  /** The window `consumed` counts: windows of the period from `notBefore`, or always 0 for a limit in total. */
+  window: number | bigint;
   terms: TermsArgs;
 };
 
 /** Gets the encoder for {@link MandateArgs} account data. */
-export function getMandateEncoder(): FixedSizeEncoder<MandateArgs> {
+export function getMandateEncoder(): Encoder<MandateArgs> {
   return transformEncoder(
     getStructEncoder([
       ["tag", getU8Encoder()],
-      ["rolled", getI64Encoder()],
-      ["consumed", getU64Encoder()],
+      ["authority", getAddressEncoder()],
       ["payer", getAddressEncoder()],
       ["index", getU64Encoder()],
+      ["consumed", getU64Encoder()],
+      ["window", getU64Encoder()],
       ["terms", getTermsEncoder()],
     ]),
     (value) => ({ ...value, tag: MANDATE_TAG }),
@@ -90,19 +95,20 @@ export function getMandateEncoder(): FixedSizeEncoder<MandateArgs> {
 }
 
 /** Gets the decoder for {@link Mandate} account data. */
-export function getMandateDecoder(): FixedSizeDecoder<Mandate> {
+export function getMandateDecoder(): Decoder<Mandate> {
   return getStructDecoder([
     ["tag", getU8Decoder()],
-    ["rolled", getI64Decoder()],
-    ["consumed", getU64Decoder()],
+    ["authority", getAddressDecoder()],
     ["payer", getAddressDecoder()],
     ["index", getU64Decoder()],
+    ["consumed", getU64Decoder()],
+    ["window", getU64Decoder()],
     ["terms", getTermsDecoder()],
   ]);
 }
 
 /** Gets the codec for {@link Mandate} account data. */
-export function getMandateCodec(): FixedSizeCodec<MandateArgs, Mandate> {
+export function getMandateCodec(): Codec<MandateArgs, Mandate> {
   return combineCodec(getMandateEncoder(), getMandateDecoder());
 }
 

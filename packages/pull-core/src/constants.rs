@@ -28,8 +28,11 @@ pub const PROFILE_TAG: u8 = 3;
 /// Self-CPI event instruction discriminator.
 pub const EVENT_DISCRIMINATOR: u8 = 255;
 
-/// Terms: authority, spender, not_before, not_after, from, max, period, to, receive.to, receive.min.
-pub const TERMS_LEN: usize = 32 + 32 + 8 + 8 + 32 + 8 + 4 + 32 + 32 + 8; // 196
-/// Fixed header; the terms follow it.
-pub const MANDATE_LEN: usize = 1 + 8 + 8 + 32 + 8; // 57
+/// Mandate header and usage: tag, authority, payer, index, consumed, window.
+/// The terms follow it.
+pub const MANDATE_LEN: usize = 1 + 32 + 32 + 8 + 8 + 8; // 89
+/// Terms without `in`: spender, not_before, not_after, from, to, max, period.
+pub const TERMS_LEN: usize = 32 + 8 + 8 + 32 + 32 + 8 + 4; // 124
+/// `in`, a suffix to the terms when they have one: to, min.
+pub const IN_LEN: usize = 32 + 8; // 40
 pub const PROFILE_LEN: usize = 1 + 32 + 8 + 8; // 49

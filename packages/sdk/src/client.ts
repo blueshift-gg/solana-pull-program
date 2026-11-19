@@ -60,14 +60,14 @@ export const terms = (args: TermsArgs): Terms => getTermsCodec().decode(getTerms
 /**
  * Whether the program accepts these terms, by the same rules as `pull-core`
  * (`npm test` checks both agree). Something must be bound: who takes, where
- * it goes, or what the authority receives.
+ * it goes, or what comes back.
  */
 export function isValid(t: Terms): boolean {
     const time = (at: bigint) => at >= 0n && at <= MAX_TIME;
-    const [notAfter, receive] = [some(t.notAfter), some(t.receive)];
+    const [notAfter, back] = [some(t.notAfter), some(t.in)];
     const window = time(t.notBefore) && (notAfter === null || (notAfter > t.notBefore && time(notAfter)));
-    const bound = some(t.spender) !== null || some(t.limit.to) !== null || receive !== null;
-    return window && t.limit.max > 0n && (!receive || receive.min > 0n) && bound;
+    const bound = some(t.spender) !== null || some(t.out.to) !== null || back !== null;
+    return window && t.out.max > 0n && (!back || back.min > 0n) && bound;
 }
 
 /**
@@ -116,12 +116,12 @@ export const enableInstruction = (p: { owner: TransactionSigner; account: Addres
  */
 export async function onboardInstructions(rpc: Client, p: { authority: TransactionSigner; payer: TransactionSigner; terms: TermsArgs }) {
     const profileAddress = await pda(findProfilePda({ authority: p.authority.address }));
-    const [[from], profile] = await Promise.all([fetchAccounts(rpc, [p.terms.limit.from]), fetchMaybeProfile(rpc, profileAddress)]);
-    if (!from) throw new Error(`token account ${p.terms.limit.from} does not exist`);
+    const [[from], profile] = await Promise.all([fetchAccounts(rpc, [p.terms.out.from]), fetchMaybeProfile(rpc, profileAddress)]);
+    if (!from) throw new Error(`token account ${p.terms.out.from} does not exist`);
     const index = (profile.exists ? profile.data.mandates : 0n) + 1n;
     const mandate = await pda(findMandatePda({ authority: p.authority.address, index }));
     const instructions: Instruction[] = [
-        ...(seat(from.data).enabled ? [] : [enableInstruction({ account: p.terms.limit.from, owner: p.authority, tokenProgram: from.owner })]),
+        ...(seat(from.data).enabled ? [] : [enableInstruction({ account: p.terms.out.from, owner: p.authority, tokenProgram: from.owner })]),
         ...(profile.exists ? [] : [await getOpenInstructionAsync({ authority: p.authority, payer: p.payer })]),
         await getCreateInstructionAsync({ authority: p.authority, payer: p.payer, mandate, terms: p.terms }),
     ];
@@ -131,30 +131,30 @@ export async function onboardInstructions(rpc: Client, p: { authority: Transacti
 /**
  * Take `amount` under a mandate (`fetchMandateStatus` or `fetchMandates` give
  * it). `to` is where the tokens go unless the terms name it; `payFrom` is the
- * spender's account that pays what the authority must receive; `reference`
+ * spender's account that pays what must come back; `reference`
  * is the spender's own 32-byte id for this pull, which the event carries.
  * The mints and token programs are read from the token accounts the terms name.
  */
 export async function pullInstruction(rpc: Client, p: { spender: TransactionSigner; mandate: Account<Mandate>; amount: bigint; to?: Address; payFrom?: Address; reference?: Uint8Array }) {
-    const t = p.mandate.data.terms;
-    const [to, receive] = [some(t.limit.to) ?? p.to, some(t.receive)];
+    const { authority, terms: t } = p.mandate.data;
+    const [to, back] = [some(t.out.to) ?? p.to, some(t.in)];
     if (!to) throw new Error('the terms do not name where the tokens go: pass `to`');
-    if (receive && !p.payFrom) throw new Error('the authority must receive something: pass `payFrom`');
-    const [from, payTo] = await fetchAccounts(rpc, [t.limit.from, ...(receive ? [receive.to] : [])]);
-    if (!from || (receive && !payTo)) throw new Error('a token account the terms name does not exist');
+    if (back && !p.payFrom) throw new Error('something must come back: pass `payFrom`');
+    const [from, payTo] = await fetchAccounts(rpc, [t.out.from, ...(back ? [back.to] : [])]);
+    if (!from || (back && !payTo)) throw new Error('a token account the terms name does not exist');
     // Token account: mint at 0
     const mint = (a: { data: Uint8Array }) => getAddressDecoder().decode(a.data.subarray(0, 32));
     return getPullInstruction({
         amount: p.amount,
-        from: t.limit.from,
+        from: t.out.from,
         mandate: p.mandate.address,
         mint: mint(from),
-        profile: await pda(findProfilePda({ authority: t.authority })),
+        profile: await pda(findProfilePda({ authority })),
         reference: p.reference ?? null,
         spender: p.spender,
         to,
         tokenProgram: from.owner,
-        ...(receive ? { payFrom: p.payFrom, payMint: mint(payTo!), payProgram: payTo!.owner, payTo: receive.to } : {}),
+        ...(back ? { payFrom: p.payFrom, payMint: mint(payTo!), payProgram: payTo!.owner, payTo: back.to } : {}),
     });
 }
 
@@ -163,7 +163,7 @@ export async function pullInstruction(rpc: Client, p: { spender: TransactionSign
  * time, anyone once it expired or was invalidated.
  */
 export const closeMandateInstruction = async (p: { closer: TransactionSigner; mandate: Account<Mandate> }) =>
-    getCloseInstruction({ closer: p.closer, mandate: p.mandate.address, payer: p.mandate.data.payer, profile: await pda(findProfilePda({ authority: p.mandate.data.terms.authority })) });
+    getCloseInstruction({ closer: p.closer, mandate: p.mandate.address, payer: p.mandate.data.payer, profile: await pda(findProfilePda({ authority: p.mandate.data.authority })) });
 
 /** The state of a mandate, as a spender needs it before it pulls. */
 export type MandateState =
@@ -187,14 +187,14 @@ export type MandateState =
 export async function fetchMandateStatus(rpc: Client, mandate: Address) {
     const found = await fetchMaybeMandate(rpc, mandate);
     if (!found.exists) return { available: 0n, state: 'missing' as MandateState };
-    const { index, terms: t, consumed, rolled } = found.data;
-    const profile = await pda(findProfilePda({ authority: t.authority }));
-    const [profileData, from, clock] = await accounts(rpc, [profile, t.limit.from, CLOCK]);
+    const { authority, index, terms: t, consumed, window: counted } = found.data;
+    const profile = await pda(findProfilePda({ authority }));
+    const [profileData, from, clock] = await accounts(rpc, [profile, t.out.from, CLOCK]);
     // Profile: tag, authority, mandates, stale at 41. Clock: unix_timestamp at 32
     const [stale, now] = [profileData ? view(profileData).getBigUint64(41, true) : 0n, view(clock!).getBigInt64(32, true)];
-    const period = some(t.limit.period);
-    const window = (at: bigint) => (period === null ? 0n : (at - t.notBefore) / BigInt(period));
-    const left = t.limit.max - (window(now) === window(rolled) ? consumed : 0n);
+    const period = some(t.out.period);
+    const window = period === null ? 0n : (now - t.notBefore) / BigInt(period);
+    const left = t.out.max - (window === counted ? consumed : 0n);
     const held = from ? seat(from) : { allowance: 0n, balance: 0n, enabled: false };
     const notAfter = some(t.notAfter);
     const state: MandateState =
@@ -220,7 +220,7 @@ export async function fetchMandates(rpc: Client, by: { authority: Address } | { 
         }
         return found;
     }
-    // Mandate: tag 1, a 57-byte header, then the terms: authority, spender at 89
+    // Mandate: tag 1, an 89-byte header, then the terms: spender at 89
     const filters = [
         { memcmp: { bytes: getBase58Decoder().decode(Uint8Array.of(1)) as Base58EncodedBytes, encoding: 'base58' as const, offset: 0n } },
         { memcmp: { bytes: by.spender as string as Base58EncodedBytes, encoding: 'base58' as const, offset: 89n } },

@@ -26,7 +26,7 @@ Undo      Close one mandate · Invalidate all of them
 | Owner, spender, destination | Payer, creditor, beneficiary |
 | Mandate with a limit per period | Direct debit mandate; variable recurring payment consent |
 | Mandate to a named destination | Crossed cheque |
-| What the owner must receive | Delivery versus payment |
+| What must come back | Delivery versus payment |
 | The reference on a pull | Payment reference |
 | A named refusal (`InsufficientFunds`, `NotDelegate`) | Return reason code |
 | `Close`, `Invalidate` | Stop one mandate; cancel every mandate |
@@ -35,7 +35,7 @@ One thing banking has and this does not: there are no refunds or disputes. A pul
 the terms allow is final.
 
 `Pull` moves tokens out of the owner's account as its SPL delegate, within the limit. If
-the terms say what the owner must receive, the same instruction moves it from the
+the terms say what must come back, the same instruction moves it from the
 spender to the owner and checks what arrived. Funds stay in the owner's wallet until
 then, and there is nothing between the two transfers to trust. Another program can call
 `Pull`, for example to collect a payment and update its own state together.
@@ -51,17 +51,15 @@ then, and there is nothing between the two transfers to trust. Another program c
 ## Terms
 
 ```text
-Terms   { authority, spender?, not_before, not_after?, limit, receive? }
-Limit   { from, max, period?, to? }
-Receive { to, min }
+Terms { spender?, not_before, not_after?, out, in? }
+Out   { from, to?, max, period? }
+In    { to, min }
 ```
 
-The encoding has a fixed size, 196 bytes, with every field at a fixed offset. An absent
-value is all zeroes, and zeroes are never a valid present value: the zero key is the
-system program, which is no token account and never signs, and a period, an expiry or
-a minimum of zero is invalid. No spender means anyone may pull.
+The authority is not part of the terms. It is whoever signs `Create`, and the mandate
+records it.
 
-`limit` is what may go out: "at most `max` may leave `from`", a token account of the
+`out` is what may go out: "at most `max` may leave `from`", a token account of the
 owner, in its mint. With `to` it also says where: the tokens may go only to that token
 account, so whoever holds the spender's key can deliver the money but not redirect it.
 Without `to` the spender chooses.
@@ -69,16 +67,17 @@ Without `to` the spender chooses.
 The limit counts over fixed windows of `period` seconds that start at `not_before`, and
 what is unused in a window does not carry over. With no period it counts in total.
 
-`receive` is what must come in: "each pull, at least `min` arrives in `to`", a token
-account of the owner, in its mint. It is a total, not a rate: a spender that takes less
-still delivers all of it.
+`in` is what must come back: "each pull, at least `min` arrives in `to`", an account of
+the owner, in its mint. It is a total, not a rate: a spender that takes less still
+delivers all of it. `out.to` is where the owner's tokens go; `in.to` is where the
+payment for them lands.
 
 The terms name token accounts, not mints. A token account's mint never changes, and
-`Pull` checks that the mints it is given are the ones of `from` and `receive.to`.
+`Pull` checks that the mints it is given are the ones of `out.from` and `in.to`.
 
 Terms are valid only if they bind something: a named spender, a named destination, or
-something the owner receives. Terms that leave all three open would pay whoever finds
-them.
+something that comes back. Terms that leave all three open would pay whoever finds
+them. No spender means anyone may pull.
 
 ## Profile
 
@@ -99,10 +98,29 @@ can no longer land.
 
 ## Mandates
 
-A mandate is an account at a PDA of the owner and its number. It holds the terms, how
-much of the limit is used, and who paid its rent. Only a transaction signed by the owner
-creates one, so everything a spender can do is on chain. A wallet lists an owner's
-mandates by their numbers, with no scan of the program's accounts.
+A mandate is an account at a PDA of the owner and its number. Only a transaction signed
+by the owner creates one, so everything a spender can do is on chain. A wallet lists an
+owner's mandates by their numbers, with no scan of the program's accounts.
+
+```text
+Mandate   PDA ["mandate", authority, index]                    213 bytes, 253 with `in`
+  header  tag · authority · payer · index                      who, written once
+  usage   consumed · window                                    the only bytes Pull writes
+  terms   spender · not_before · not_after · out · in?         what, written once
+```
+
+Every field sits at a fixed offset: the spender at 89, `out.from` at 137, `out.to` at
+169. An absent value is all zeroes, never a valid present one: the zero key is the
+system program, which is no token account and never signs, and an expiry at 0 or a
+period of zero seconds is invalid. `in` is a suffix, present only when the terms have
+one.
+
+`authority` is checked against the owner of `out.from` on every pull. A mandate belongs
+to the owner that signed it, not to the token account: when an account changes owner,
+the token program clears its delegate, and the new owner enabling it again does not
+bring the old owner's mandates back. `window` is the window of the limit that
+`consumed` counts: windows of the period from `not_before`, or always 0 for a limit in
+total.
 
 Whoever pays the rent is always a separate account from whoever signs, so a merchant can
 sponsor a subscriber. The owner ends a mandate at any time with `Close`. Anyone closes
@@ -113,7 +131,7 @@ payer.
 A one-off payment is a mandate whose limit counts in total. Once it is used up, anyone
 can close it.
 
-A mandate is 253 bytes and costs about 0.0027 SOL of rent, returned when it closes.
+A mandate costs about 0.0024 SOL of rent, 0.0027 SOL with `in`, returned when it closes.
 
 ## Instructions
 
@@ -121,7 +139,7 @@ A mandate is 253 bytes and costs about 0.0027 SOL of rent, returned when it clos
 |---|---|---|---|
 | 3 | `Open` | the owner | create its profile, once |
 | 0 | `Create` | the owner | put a mandate on chain, under the next number |
-| 1 | `Pull` | the spender | take tokens under a mandate, and deliver what the owner must receive |
+| 1 | `Pull` | the spender | take tokens under a mandate, and deliver what must come back |
 | 2 | `Close` | the owner, or anyone once it can never pull again | end a mandate and return its rent |
 | 4 | `Invalidate` | the owner | end every mandate so far |
 
@@ -160,7 +178,7 @@ LiteSVM, the instruction alone, one run each:
 |---|---|
 | `Open` | 5.1k |
 | `Create` | 5.5k |
-| `Pull` | 4.2k |
+| `Pull` | 4.0k |
 | `Pull` that also delivers to the owner | 5.5k |
 | `Close` | 2.0k |
 | `Invalidate` | 1.7k |

@@ -38,15 +38,15 @@ function amount(raw: bigint, account: Address, tokens: Tokens): string {
 
 /** Terms in a wallet's words: who can take what, where it goes, what comes back, and until when. */
 export function describeTerms(terms: Terms, tokens: Tokens = {}): Row[] {
-    const { limit } = terms;
-    const [spender, to, receive, notAfter] = [some(terms.spender), some(limit.to), some(terms.receive), some(terms.notAfter)];
+    const { out } = terms;
+    const [spender, to, back, notAfter] = [some(terms.spender), some(out.to), some(terms.in), some(terms.notAfter)];
     const rows: Row[] = [
         ['Who can take it', spender ? short(spender) : 'Anyone'],
-        ['Can take', `Up to ${amount(limit.max, limit.from, tokens)}${some(limit.period) !== null ? ` every ${span(some(limit.period)!)}` : ' in total'}`],
-        ['From', short(limit.from)],
+        ['Can take', `Up to ${amount(out.max, out.from, tokens)}${some(out.period) !== null ? ` every ${span(some(out.period)!)}` : ' in total'}`],
+        ['From', short(out.from)],
         ['Goes to', to ? `Only ${short(to)}` : 'Wherever the taker chooses'],
     ];
-    if (receive) rows.push(['Only if you receive', `At least ${amount(receive.min, receive.to, tokens)} into ${short(receive.to)} each time`]);
+    if (back) rows.push(['Only if you receive', `At least ${amount(back.min, back.to, tokens)} into ${short(back.to)} each time`]);
     rows.push(['Starts', date(terms.notBefore)], ['Ends', notAfter === null ? 'Never, until you cancel it' : date(notAfter)]);
     return rows;
 }

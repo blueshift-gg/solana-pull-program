@@ -59,35 +59,35 @@ impl Profile {
     field!(stale, set_stale, u64);
 }
 
-/// A mandate: this header, then its terms.
+/// A mandate: who it is from, then how much of the limit is used, then its
+/// terms. `consumed` and `window` are the only bytes `Pull` writes.
 #[repr(C)]
 pub struct Mandate {
     tag: [u8; 1],
-    /// When `consumed` was last written.
-    rolled: [u8; 8],
-    consumed: [u8; 8],
+    /// Signed `Create`; must own the account the terms take from.
+    pub authority: Pubkey,
     /// Paid the rent; refunded by `Close`.
     pub payer: Pubkey,
     /// Its number among the authority's mandates.
     index: [u8; 8],
+    /// What the limit has used in `window`.
+    consumed: [u8; 8],
+    /// The window `consumed` counts: windows of the period from `not_before`,
+    /// or always 0 for a limit in total.
+    window: [u8; 8],
 }
 
 account!(Mandate);
 
 impl Mandate {
     field!(tag, set_tag, u8);
-    field!(rolled, set_rolled, i64);
+    field!(window, set_window, u64);
     field!(consumed, set_consumed, u64);
     field!(index, set_index, u64);
 
-    /// What the limit has consumed at `now`. A periodic limit starts each
-    /// window, counted from `start`, with nothing consumed.
-    pub fn spent(&self, period: Option<u32>, start: i64, now: i64) -> u64 {
-        let Some(seconds) = period else {
-            return self.consumed();
-        };
-        let window = |t: i64| (t - start).div_euclid(seconds as i64);
-        match window(now) == window(self.rolled()) {
+    /// What the limit has used in `window`: a new window starts with nothing used.
+    pub fn spent(&self, window: u64) -> u64 {
+        match window == self.window() {
             true => self.consumed(),
             false => 0,
         }

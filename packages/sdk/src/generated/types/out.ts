@@ -27,32 +27,27 @@ import {
 } from "@solana/kit";
 
 /** What may go out: at most `max` may leave `from`, a token account of the authority, in its mint. */
-export type Limit = {
+export type Out = {
   from: Address;
+  /** The only token account the tokens may go to. None leaves it to the spender. */
+  to: Option<Address>;
   max: bigint;
   /** Fixed windows of this length, counted from `notBefore`, with nothing carried over. None counts over the life of the mandate. */
   period: Option<number>;
-  /** The only token account the tokens may go to. None leaves it to the spender. */
-  to: Option<Address>;
 };
 
-export type LimitArgs = {
+export type OutArgs = {
   from: Address;
+  /** The only token account the tokens may go to. None leaves it to the spender. */
+  to: OptionOrNullable<Address>;
   max: number | bigint;
   /** Fixed windows of this length, counted from `notBefore`, with nothing carried over. None counts over the life of the mandate. */
   period: OptionOrNullable<number>;
-  /** The only token account the tokens may go to. None leaves it to the spender. */
-  to: OptionOrNullable<Address>;
 };
 
-export function getLimitEncoder(): FixedSizeEncoder<LimitArgs> {
+export function getOutEncoder(): FixedSizeEncoder<OutArgs> {
   return getStructEncoder([
     ["from", getAddressEncoder()],
-    ["max", getU64Encoder()],
-    [
-      "period",
-      getOptionEncoder(getU32Encoder(), { prefix: null, noneValue: "zeroes" }),
-    ],
     [
       "to",
       getOptionEncoder(getAddressEncoder(), {
@@ -60,17 +55,17 @@ export function getLimitEncoder(): FixedSizeEncoder<LimitArgs> {
         noneValue: "zeroes",
       }),
     ],
+    ["max", getU64Encoder()],
+    [
+      "period",
+      getOptionEncoder(getU32Encoder(), { prefix: null, noneValue: "zeroes" }),
+    ],
   ]);
 }
 
-export function getLimitDecoder(): FixedSizeDecoder<Limit> {
+export function getOutDecoder(): FixedSizeDecoder<Out> {
   return getStructDecoder([
     ["from", getAddressDecoder()],
-    ["max", getU64Decoder()],
-    [
-      "period",
-      getOptionDecoder(getU32Decoder(), { prefix: null, noneValue: "zeroes" }),
-    ],
     [
       "to",
       getOptionDecoder(getAddressDecoder(), {
@@ -78,9 +73,14 @@ export function getLimitDecoder(): FixedSizeDecoder<Limit> {
         noneValue: "zeroes",
       }),
     ],
+    ["max", getU64Decoder()],
+    [
+      "period",
+      getOptionDecoder(getU32Decoder(), { prefix: null, noneValue: "zeroes" }),
+    ],
   ]);
 }
 
-export function getLimitCodec(): FixedSizeCodec<LimitArgs, Limit> {
-  return combineCodec(getLimitEncoder(), getLimitDecoder());
+export function getOutCodec(): FixedSizeCodec<OutArgs, Out> {
+  return combineCodec(getOutEncoder(), getOutDecoder());
 }

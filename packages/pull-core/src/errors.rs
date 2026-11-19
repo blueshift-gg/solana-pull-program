@@ -22,8 +22,6 @@ pub enum PullError {
     MalformedTerms,
     /// The terms break a validity rule (`Terms::validate`)
     InvalidTerms,
-    /// The signer is not the terms' authority
-    InvalidAuthority,
 
     /// The terms' window has not opened
     NotYetValid,
@@ -70,7 +68,7 @@ pub enum PullError {
 impl PullError {
     /// Every error in code order, so clients can name a code: `ALL[code]`.
     /// A new variant goes here too; the test below checks the order.
-    pub const ALL: [PullError; 28] = [
+    pub const ALL: [PullError; 27] = [
         PullError::NotSigner,
         PullError::NotMutable,
         PullError::InvalidAccountOwner,
@@ -80,7 +78,6 @@ impl PullError {
         PullError::AlreadyInitialized,
         PullError::MalformedTerms,
         PullError::InvalidTerms,
-        PullError::InvalidAuthority,
         PullError::NotYetValid,
         PullError::Expired,
         PullError::InvalidSpender,

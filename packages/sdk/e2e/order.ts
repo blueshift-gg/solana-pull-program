@@ -9,7 +9,7 @@ export async function order() {
 
     // Sell 100 USDC for at least 0.52 SOL, to anyone, for an hour: one transaction
     const start = await now();
-    const sell = { authority: owner.address, limit: { from: usdc, max: 100_000_000n, period: null, to: null }, notAfter: start + 3_600n, notBefore: start, receive: { min: 520_000_000n, to: sol }, spender: null };
+    const sell = { out: { from: usdc, max: 100_000_000n, period: null, to: null }, notAfter: start + 3_600n, notBefore: start, in: { min: 520_000_000n, to: sol }, spender: null };
     const { instructions, mandate } = await onboardInstructions(rpc, { authority: owner, payer: owner, terms: sell });
     await send(owner, instructions);
     const status = await fetchMandateStatus(rpc, mandate);

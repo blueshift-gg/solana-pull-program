@@ -5,7 +5,7 @@
 //! `bytes` is hex.
 
 use pull_core::constants::MAX_TIME;
-use pull_core::terms::{Limit, Receive, Terms};
+use pull_core::terms::{In, Out, Terms};
 
 struct Random(u64);
 
@@ -61,23 +61,22 @@ fn main() {
             2 => Some(r.next() as u32),
             _ => Some([60, 3_600, 86_400, 2_592_000, 90_061][r.below(5) as usize]),
         };
-        let receive = (r.below(2) == 0).then(|| Receive {
+        let receive = (r.below(2) == 0).then(|| In {
             to: &keys[5],
             min: r.amount(),
         });
         let terms = Terms {
-            authority: &keys[0],
             spender: (r.below(2) == 0).then_some(&keys[1]),
             not_before,
             not_after: (r.below(2) == 0)
                 .then(|| not_before.saturating_add(r.below(1_000_000) as i64 - 10)),
-            limit: Limit {
+            out: Out {
                 from: &keys[2],
                 max: r.amount(),
                 period,
                 to: (r.below(2) == 0).then_some(&keys[4]),
             },
-            receive,
+            r#in: receive,
         };
         let mut bytes = Vec::new();
         terms.write(&mut bytes);

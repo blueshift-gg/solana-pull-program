@@ -33,29 +33,29 @@ const bytes = (size) => c.fixedSizeTypeNode(c.bytesTypeNode(), size);
 const types = [
     c.definedTypeNode({
         docs: ['What may go out: at most `max` may leave `from`, a token account of the authority, in its mint.'],
-        name: 'limit',
+        name: 'out',
         type: c.structTypeNode([
             field('from', key),
+            field('to', option(key), ['The only token account the tokens may go to. None leaves it to the spender.']),
             field('max', u64),
             field('period', option(span), ['Fixed windows of this length, counted from `notBefore`, with nothing carried over. None counts over the life of the mandate.']),
-            field('to', option(key), ['The only token account the tokens may go to. None leaves it to the spender.']),
         ]),
     }),
     c.definedTypeNode({
-        docs: ['What must come in: each use, at least `min` arrives in `to`, a token account of the authority, in its mint.'],
-        name: 'receive',
+        docs: ['What must come back: each pull, at least `min` arrives in `to`, a token account of the authority, in its mint.'],
+        name: 'in',
         type: c.structTypeNode([field('to', key), field('min', u64)]),
     }),
     c.definedTypeNode({
-        docs: ['What an authority permits under a mandate.'],
+        docs: ['What a mandate permits. Its authority is whoever signs `Create`.'],
         name: 'terms',
         type: c.structTypeNode([
-            field('authority', key),
             field('spender', option(key), ['Who may pull. None is anyone.']),
             field('notBefore', time),
             field('notAfter', option(time)),
-            field('limit', link('limit')),
-            field('receive', option(link('receive'))),
+            field('out', link('out')),
+            // A suffix: present only when the terms have one
+            field('in', c.remainderOptionTypeNode(link('in'))),
         ]),
     }),
 ];
@@ -64,11 +64,12 @@ const tag = (value) => c.structFieldTypeNode({ defaultValue: c.numberValueNode(v
 const account = (name, value, docs, fields, pda) =>
     c.accountNode({ data: c.structTypeNode([tag(value), ...fields]), discriminators: [c.fieldDiscriminatorNode('tag')], docs, name, pda: c.pdaLinkNode(pda ?? name) });
 const accounts = [
-    account('mandate', 1, ['A standing permission on chain: this header, then its terms.'], [
-        field('rolled', i64, ['When `consumed` was last written.']),
-        field('consumed', u64),
+    account('mandate', 1, ['A standing permission on chain: who it is from, how much of the limit is used, then its terms.'], [
+        field('authority', key, ['Signed `Create`; must own the account the terms take from.']),
         field('payer', key, ['Paid the rent; it goes back there.']),
         field('index', u64, ["Its number among the authority's mandates."]),
+        field('consumed', u64, ['What the limit has used in `window`.']),
+        field('window', u64, ['The window `consumed` counts: windows of the period from `notBefore`, or always 0 for a limit in total.']),
         field('terms', link('terms')),
     ]),
     account('profile', 3, ["An authority's profile: it numbers its mandates and holds what invalidates them."], [

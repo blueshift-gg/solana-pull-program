@@ -3,14 +3,16 @@ use crate::helpers::{allowance, balance, transfer};
 use crate::state::{mandate, profile};
 use pinocchio::log::sol_log;
 use pinocchio::sysvars::{clock::Clock, Sysvar};
-use pinocchio::{account_info::AccountInfo, program_error::ProgramError, ProgramResult};
+use pinocchio::{
+    account_info::AccountInfo, program_error::ProgramError, pubkey::Pubkey, ProgramResult,
+};
 use pull_core::errors::PullError;
 use pull_core::terms::Terms;
 
 /// # Pull
 ///
 /// Take tokens under a mandate, within its limit. If the
-/// mandate says what the authority receives, the spender pays it here, in the
+/// mandate says what must come back, the spender pays it here, in the
 /// same instruction: there is nothing in between to trust. Callable by CPI.
 ///
 /// > Check the authority has not invalidated the mandate
@@ -31,7 +33,7 @@ use pull_core::terms::Terms;
 /// 8. program:         [executable]    this program, for the event CPI
 /// 9. token_program:   [executable]    of `from`
 ///
-/// If the authority receives something, also:
+/// If something must come back, also:
 ///
 /// 10. pay_from:       [mut]           the spender's token account
 /// 11. pay_mint:                       the mint of `pay_to`
@@ -67,7 +69,7 @@ pub struct Pull<'a> {
     pub to: &'a AccountInfo,
     pub engine: &'a AccountInfo,
     pub program: &'a AccountInfo,
-    /// `[pay_from, pay_mint, pay_to]` when the authority receives something.
+    /// `[pay_from, pay_mint, pay_to]` when something must come back.
     pub payment: &'a [AccountInfo],
     pub amount: u64,
     pub reference: [u8; 32],
@@ -131,7 +133,8 @@ impl<'a> Pull<'a> {
         }
         let (mandate, bytes) = mandate(self.mandate)?;
         let terms = Terms::decode(bytes)?;
-        if mandate.index() <= profile(self.profile, terms.authority)?.stale() {
+        let authority = mandate.authority;
+        if mandate.index() <= profile(self.profile, &authority)?.stale() {
             return Err(PullError::Stale.into());
         }
 
@@ -147,24 +150,25 @@ impl<'a> Pull<'a> {
         }
 
         // From the account the terms limit, to the one they name if they name one
-        let limit = terms.limit;
-        if limit.from.ne(self.from.key()) {
+        let out = terms.out;
+        if out.from.ne(self.from.key()) {
             return Err(PullError::InvalidPull.into());
         }
-        if limit.to.is_some_and(|to| to.ne(self.to.key())) {
+        if out.to.is_some_and(|to| to.ne(self.to.key())) {
             return Err(PullError::InvalidDestination.into());
         }
 
-        // The amount must fit what is left of the limit
-        let spent = mandate.spent(limit.period, terms.not_before, now);
-        let spent = spent.checked_add(amount).ok_or(PullError::Overflow)?;
-        if spent > limit.max {
+        // The amount must fit what is left of the limit in this window
+        let window = terms.window(now);
+        let spent = mandate.spent(window).checked_add(amount);
+        let spent = spent.ok_or(PullError::Overflow)?;
+        if spent > out.max {
             return Err(PullError::LimitExceeded.into());
         }
         mandate.set_consumed(spent);
-        mandate.set_rolled(now);
+        mandate.set_window(window);
 
-        let paid = self.settle(&terms)?;
+        let paid = self.settle(&authority, &terms)?;
 
         // Log the Pull Event
         emit(
@@ -182,12 +186,12 @@ impl<'a> Pull<'a> {
     }
 
     /// Take the amount as the delegate, only from the authority's own account.
-    /// If the terms say what the authority receives, the spender pays it, and
-    /// all of it must arrive. Returns what was paid.
-    fn settle(&self, terms: &Terms) -> Result<u64, ProgramError> {
+    /// If the terms say what must come back, the spender pays it, and all of
+    /// it must arrive. Returns what was paid.
+    fn settle(&self, authority: &Pubkey, terms: &Terms) -> Result<u64, ProgramError> {
         let amount = self.amount;
         // `mint` must be the mint of `from`: the terms name only the account
-        let held = balance(self.from, self.mint.key(), terms.authority)?;
+        let held = balance(self.from, self.mint.key(), authority)?;
         // Name what the token program would only refuse with its own codes
         if allowance(self.from)? < amount {
             return Err(PullError::AllowanceExceeded.into());
@@ -207,17 +211,17 @@ impl<'a> Pull<'a> {
             true,
         )?;
 
-        let Some(receive) = terms.receive else {
+        let Some(back) = terms.r#in else {
             return Ok(0);
         };
         let [pay_from, pay_mint, pay_to, ..] = self.payment else {
             return Err(ProgramError::NotEnoughAccountKeys);
         };
-        if receive.to.ne(pay_to.key()) {
+        if back.to.ne(pay_to.key()) {
             return Err(PullError::InvalidTarget.into());
         }
         // `pay_mint` must be the mint of `pay_to`, which the terms name
-        let before = balance(pay_to, pay_mint.key(), terms.authority)?;
+        let before = balance(pay_to, pay_mint.key(), authority)?;
         // The payment goes through the token program of the account that
         // receives it, which `balance` just checked, whatever `pay_from` is
         // SAFETY: `owner` is only read.
@@ -228,16 +232,13 @@ impl<'a> Pull<'a> {
             pay_mint,
             pay_to,
             self.spender,
-            receive.min,
+            back.min,
             false,
         )?;
-        let after = balance(pay_to, pay_mint.key(), terms.authority)?;
-        if after
-            .checked_sub(before)
-            .is_none_or(|got| got < receive.min)
-        {
+        let after = balance(pay_to, pay_mint.key(), authority)?;
+        if after.checked_sub(before).is_none_or(|got| got < back.min) {
             return Err(PullError::NotReceived.into());
         }
-        Ok(receive.min)
+        Ok(back.min)
     }
 }

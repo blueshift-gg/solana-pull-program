@@ -8,7 +8,8 @@ use pull_core::{constants::*, errors::PullError, terms::Terms};
 /// # Create
 ///
 /// Put a mandate on chain: a standing permission its spender uses with `Pull`.
-/// Only a transaction the authority signs creates one, so closing it is final.
+/// Its authority is the signer, and only a transaction it signs creates one,
+/// so closing it is final.
 ///
 /// > Take the next number from the authority's profile
 /// > Create the Mandate PDA for that number
@@ -25,10 +26,10 @@ use pull_core::{constants::*, errors::PullError, terms::Terms};
 /// 7. program:         [executable]    this program, for the event CPI
 ///
 /// Parameters:
-/// 1. terms: [u8; TERMS_LEN],
+/// 1. terms: [u8],     // TERMS_LEN bytes, or TERMS_LEN + IN_LEN with `in`
 ///
 /// Account Checks:
-/// - Authority: signer, and the terms' authority
+/// - Authority: signer
 /// - Profile: writable; the authority's, checked in process
 /// - Mandate: writable; the PDA for the next number, checked in process
 /// - Payer, SystemProgram, Engine, Program: no need to check since the CPIs fail otherwise
@@ -62,14 +63,11 @@ impl<'a> TryFrom<(&'a [u8], &'a [AccountInfo])> for Create<'a> {
         };
 
         // Instruction Checks
-        let terms = Terms::decode(bytes)?;
+        Terms::decode(bytes)?;
 
         // Account Checks
         if !authority.is_signer() {
             return Err(PullError::NotSigner.into());
-        }
-        if terms.authority.ne(authority.key()) {
-            return Err(PullError::InvalidAuthority.into());
         }
         if !profile.is_writable() || !mandate.is_writable() {
             return Err(PullError::NotMutable.into());
@@ -105,7 +103,7 @@ impl<'a> Create<'a> {
         let bump = check_pda(self.mandate, &seeds)?;
 
         // Create it and copy the terms after the header
-        let len = MANDATE_LEN + TERMS_LEN;
+        let len = MANDATE_LEN + self.bytes.len();
         create_pda(self.payer, self.mandate, len, &seeds, bump)?;
         // SAFETY: the account was just created with `len` bytes, and nothing else borrows it.
         let data = unsafe { self.mandate.borrow_mut_data_unchecked() };
@@ -113,6 +111,7 @@ impl<'a> Create<'a> {
         // SAFETY: `data` holds at least the header; all fields have alignment 1.
         let mandate = unsafe { Mandate::from_bytes_unchecked_mut(data) };
         mandate.set_tag(MANDATE_TAG);
+        mandate.authority = *authority;
         mandate.payer = *self.payer.key();
         mandate.set_index(index);
 

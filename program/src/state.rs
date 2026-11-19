@@ -23,11 +23,10 @@ fn bytes(account: &AccountInfo, len: usize, tag: u8) -> Result<&mut [u8], Progra
     Ok(data)
 }
 
-/// A mandate's header and the terms after it.
+/// A mandate's header and the terms after it, which `Terms::decode` checks.
 #[allow(clippy::mut_from_ref)]
 pub fn mandate(account: &AccountInfo) -> Result<(&mut Mandate, &[u8]), ProgramError> {
-    let data = bytes(account, MANDATE_LEN + TERMS_LEN, MANDATE_TAG)?;
-    let (header, terms) = data[..MANDATE_LEN + TERMS_LEN].split_at_mut(MANDATE_LEN);
+    let (header, terms) = bytes(account, MANDATE_LEN, MANDATE_TAG)?.split_at_mut(MANDATE_LEN);
     // SAFETY: `header` holds exactly the layout; all fields have alignment 1.
     Ok((unsafe { Mandate::from_bytes_unchecked_mut(header) }, terms))
 }
