@@ -74,6 +74,7 @@ fn main() {
                 from: &keys[2],
                 max: r.amount(),
                 period,
+                max_per_pull: (r.below(3) == 0).then(|| r.amount()),
                 to: (r.below(2) == 0).then_some(&keys[4]),
             },
             r#in: receive,

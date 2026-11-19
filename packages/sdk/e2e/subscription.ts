@@ -22,7 +22,7 @@ export async function subscription() {
     // The site builds one transaction: enable USDC, open the profile, create the mandate.
     // The merchant sponsors the fee and the rent; the reader only signs
     const start = await now();
-    const plan = { out: { from: account, max: 8_000_000n, period: 2_592_000, to: treasury }, notAfter: null, notBefore: start, in: null, spender: merchant.address };
+    const plan = { out: { from: account, max: 8_000_000n, period: 2_592_000, maxPerPull: 6_000_000n, to: treasury }, notAfter: null, notBefore: start, in: null, spender: merchant.address };
     const { instructions, mandate } = await onboardInstructions(rpc, { authority: reader, payer: sponsor, terms: plan });
     // What the reader's wallet shows for it: it knows its own USDC account
     const shown = instructions.map((ix) => describeInstruction(ix, { [account]: TOKENS[USDC] }));
@@ -33,9 +33,10 @@ export async function subscription() {
 
     // The merchant asks before it charges, then charges with its invoice number
     let status = await fetchMandateStatus(rpc, mandate);
-    check(status.state === 'active' && status.available === 8_000_000n, 'status: active, 8 USDC available');
+    check(status.state === 'active' && status.available === 6_000_000n, 'status: active, 6 USDC available in one charge');
     const invoice = new Uint8Array(32).fill(7);
     const charge = (amount: bigint, who = merchant) => pullInstruction(rpc, { amount, mandate: status.mandate!, reference: invoice, spender: who }).then((ix) => send(who, [ix]));
+    await refused(charge(7_000_000n), SOLANA_PULL_ERROR__LIMIT_EXCEEDED, 'one charge above 6 USDC, the most one charge may take');
     const charged = await charge(5_000_000n);
     const [pulled] = charged.events;
     check(pulled.type === 'pulled' && pulled.amount === 5_000_000n && pulled.reference.every((b) => b === 7), `5 USDC is collected, and the event carries the invoice (${charged.units} CU)`);

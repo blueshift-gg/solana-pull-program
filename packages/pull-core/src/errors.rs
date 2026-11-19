@@ -36,7 +36,7 @@ pub enum PullError {
 
     /// The account pulled from is not the one the terms limit
     InvalidPull,
-    /// The pull exceeds the limit
+    /// The pull exceeds what one pull may take, or what is left of the limit
     LimitExceeded,
     /// A token account or mint is not the one the terms name, or not the authority's
     InvalidTarget,

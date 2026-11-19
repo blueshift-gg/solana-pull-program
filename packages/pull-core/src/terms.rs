@@ -4,8 +4,8 @@
 //!
 //! Every field sits at a fixed offset. An absent value is all zeroes, which
 //! is never a valid present one: the zero key is the system program, which is
-//! no token account and never signs, and an expiry at 0 or a period of zero
-//! seconds is invalid. `in` is a suffix, present only when the terms have one.
+//! no token account and never signs, and an expiry at 0, a period of zero
+//! seconds or a cap per pull of zero is invalid. `in` is a suffix, present only when the terms have one.
 //!
 //! `Terms::decode` is the only way to read terms from bytes. It accepts exactly
 //! the encodings of valid terms, so every other module trusts them.
@@ -26,6 +26,9 @@ pub struct Out<'a> {
     /// Fixed windows of this many seconds, counted from `not_before`, with
     /// nothing carried over. `None` counts over the life of the mandate.
     pub period: Option<u32>,
+    /// The most one pull may take, at most `max`. `None` lets one pull take
+    /// all that is left.
+    pub max_per_pull: Option<u64>,
 }
 
 /// What must come back: "each pull, at least `min` arrives in `to`", a token
@@ -71,6 +74,7 @@ impl<'a> Terms<'a> {
         let (not_before, not_after) = (int(take(8)) as i64, int(take(8)) as i64);
         let (from, to, max) = (key(take(32)), some(key(take(32))), int(take(8)));
         let period = u32::from_le_bytes(take(4).try_into().unwrap());
+        let max_per_pull = int(take(8));
         let r#in = match has_in {
             true => Some(In {
                 to: key(take(32)),
@@ -87,6 +91,7 @@ impl<'a> Terms<'a> {
                 to,
                 max,
                 period: Some(period).filter(|&s| s != 0),
+                max_per_pull: Some(max_per_pull).filter(|&m| m != 0),
             },
             r#in,
         };
@@ -102,7 +107,12 @@ impl<'a> Terms<'a> {
             && self
                 .not_after
                 .is_none_or(|t| t > self.not_before && time(t));
-        let out = self.out.max > 0 && self.out.period != Some(0);
+        let out = self.out.max > 0
+            && self.out.period != Some(0)
+            && self
+                .out
+                .max_per_pull
+                .is_none_or(|m| m > 0 && m <= self.out.max);
         let r#in = self.r#in.is_none_or(|x| x.to.ne(&NONE) && x.min > 0);
         // Something must be bound: who takes, where it goes, or what comes
         // back. Otherwise the terms pay whoever finds them
@@ -131,6 +141,7 @@ impl<'a> Terms<'a> {
         w.put(self.out.to.unwrap_or(&NONE));
         w.put(&self.out.max.to_le_bytes());
         w.put(&self.out.period.unwrap_or(0).to_le_bytes());
+        w.put(&self.out.max_per_pull.unwrap_or(0).to_le_bytes());
         if let Some(x) = self.r#in {
             w.put(x.to);
             w.put(&x.min.to_le_bytes());

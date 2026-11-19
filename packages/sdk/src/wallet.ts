@@ -43,6 +43,7 @@ export function describeTerms(terms: Terms, tokens: Tokens = {}): Row[] {
     const rows: Row[] = [
         ['Who can take it', spender ? short(spender) : 'Anyone'],
         ['Can take', `Up to ${amount(out.max, out.from, tokens)}${some(out.period) !== null ? ` every ${span(some(out.period)!)}` : ' in total'}`],
+        ...(some(out.maxPerPull) !== null ? [['At most per payment', amount(some(out.maxPerPull)!, out.from, tokens)] as Row] : []),
         ['From', short(out.from)],
         ['Goes to', to ? `Only ${short(to)}` : 'Wherever the taker chooses'],
     ];

@@ -67,7 +67,9 @@ export function isValid(t: Terms): boolean {
     const [notAfter, back] = [some(t.notAfter), some(t.in)];
     const window = time(t.notBefore) && (notAfter === null || (notAfter > t.notBefore && time(notAfter)));
     const bound = some(t.spender) !== null || some(t.out.to) !== null || back !== null;
-    return window && t.out.max > 0n && (!back || back.min > 0n) && bound;
+    const perPull = some(t.out.maxPerPull);
+    const out = t.out.max > 0n && (perPull === null || (perPull > 0n && perPull <= t.out.max));
+    return window && out && (!back || back.min > 0n) && bound;
 }
 
 /**
@@ -199,7 +201,7 @@ export async function fetchMandateStatus(rpc: Client, mandate: Address) {
     const notAfter = some(t.notAfter);
     const state: MandateState =
         index <= stale ? 'invalidated' : now < t.notBefore ? 'notStarted' : notAfter !== null && now >= notAfter ? 'expired' : !held.enabled ? 'notDelegate' : 'active';
-    const least = [left, held.allowance, held.balance].reduce((a, b) => (a < b ? a : b));
+    const least = [left, some(t.out.maxPerPull) ?? left, held.allowance, held.balance].reduce((a, b) => (a < b ? a : b));
     return { allowance: held.allowance, available: state === 'active' ? least : 0n, balance: held.balance, left, mandate: found, state };
 }
 

@@ -34,6 +34,8 @@ export type Out = {
   max: bigint;
   /** Fixed windows of this length, counted from `notBefore`, with nothing carried over. None counts over the life of the mandate. */
   period: Option<number>;
+  /** The most one pull may take, at most `max`. None lets one pull take all that is left. */
+  maxPerPull: Option<bigint>;
 };
 
 export type OutArgs = {
@@ -43,6 +45,8 @@ export type OutArgs = {
   max: number | bigint;
   /** Fixed windows of this length, counted from `notBefore`, with nothing carried over. None counts over the life of the mandate. */
   period: OptionOrNullable<number>;
+  /** The most one pull may take, at most `max`. None lets one pull take all that is left. */
+  maxPerPull: OptionOrNullable<number | bigint>;
 };
 
 export function getOutEncoder(): FixedSizeEncoder<OutArgs> {
@@ -59,6 +63,10 @@ export function getOutEncoder(): FixedSizeEncoder<OutArgs> {
     [
       "period",
       getOptionEncoder(getU32Encoder(), { prefix: null, noneValue: "zeroes" }),
+    ],
+    [
+      "maxPerPull",
+      getOptionEncoder(getU64Encoder(), { prefix: null, noneValue: "zeroes" }),
     ],
   ]);
 }
@@ -77,6 +85,10 @@ export function getOutDecoder(): FixedSizeDecoder<Out> {
     [
       "period",
       getOptionDecoder(getU32Decoder(), { prefix: null, noneValue: "zeroes" }),
+    ],
+    [
+      "maxPerPull",
+      getOptionDecoder(getU64Decoder(), { prefix: null, noneValue: "zeroes" }),
     ],
   ]);
 }

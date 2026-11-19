@@ -911,6 +911,21 @@
                   }
                 }
               }
+            },
+            {
+              "kind": "structFieldTypeNode",
+              "name": "maxPerPull",
+              "docs": [
+                "The most one pull may take, at most `max`. None lets one pull take all that is left."
+              ],
+              "type": {
+                "kind": "zeroableOptionTypeNode",
+                "item": {
+                  "kind": "numberTypeNode",
+                  "format": "u64",
+                  "endian": "le"
+                }
+              }
             }
           ]
         }
@@ -1492,7 +1507,7 @@
         "kind": "errorNode",
         "name": "limitExceeded",
         "code": 15,
-        "message": "The pull exceeds the limit"
+        "message": "The pull exceeds what one pull may take, or what is left of the limit"
       },
       {
         "kind": "errorNode",

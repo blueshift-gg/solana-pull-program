@@ -31,8 +31,8 @@ pub const EVENT_DISCRIMINATOR: u8 = 255;
 /// Mandate header and usage: tag, authority, payer, index, consumed, window.
 /// The terms follow it.
 pub const MANDATE_LEN: usize = 1 + 32 + 32 + 8 + 8 + 8; // 89
-/// Terms without `in`: spender, not_before, not_after, from, to, max, period.
-pub const TERMS_LEN: usize = 32 + 8 + 8 + 32 + 32 + 8 + 4; // 124
+/// Terms without `in`: spender, not_before, not_after, from, to, max, period, max_per_pull.
+pub const TERMS_LEN: usize = 32 + 8 + 8 + 32 + 32 + 8 + 4 + 8; // 132
 /// `in`, a suffix to the terms when they have one: to, min.
 pub const IN_LEN: usize = 32 + 8; // 40
 pub const PROFILE_LEN: usize = 1 + 32 + 8 + 8; // 49

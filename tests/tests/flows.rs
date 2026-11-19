@@ -703,7 +703,11 @@ fn random_pulls_never_pass_a_limit() {
             0 => None,
             _ => Some(1 + random(1_000) as u32),
         };
-        let limits = out(&user_usdc, 1 + random(1_000), per);
+        let mut limits = out(&user_usdc, 1 + random(1_000), per);
+        // Sometimes a cap on one pull, as an agent's budget has
+        if random(2) == 0 {
+            limits.max_per_pull = Some(1 + random(limits.max));
+        }
         // Windows count from the start of the terms, which is not when they are created
         let start = now - random(5_000) as i64;
         let mut terms = terms(Some(&m), None, limits, None);
@@ -726,7 +730,9 @@ fn random_pulls_never_pass_a_limit() {
                     spent = 0;
                 }
             }
-            let fits = amount > 0 && spent + amount <= limits.max;
+            let fits = amount > 0
+                && limits.max_per_pull.is_none_or(|m| amount <= m)
+                && spent + amount <= limits.max;
 
             let accounts = (user.usdc, f.usdc, merchant.usdc);
             let spender = merchant.address();

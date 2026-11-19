@@ -39,6 +39,7 @@ const types = [
             field('to', option(key), ['The only token account the tokens may go to. None leaves it to the spender.']),
             field('max', u64),
             field('period', option(span), ['Fixed windows of this length, counted from `notBefore`, with nothing carried over. None counts over the life of the mandate.']),
+            field('maxPerPull', option(u64), ['The most one pull may take, at most `max`. None lets one pull take all that is left.']),
         ]),
     }),
     c.definedTypeNode({

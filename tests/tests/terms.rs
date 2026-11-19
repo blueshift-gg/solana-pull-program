@@ -36,6 +36,12 @@ fn terms_round_trip_and_invalid_terms_are_refused() {
     let nothing = out(&from, 0, None);
     assert!(!decoded(&terms(Some(&spender), None, nothing, None)));
     // A window of no length is not a window: on the wire it is a limit in total
+    // A cap on one pull above the limit itself
+    let mut capped = out(&from, USDC, None);
+    capped.max_per_pull = Some(USDC + 1);
+    assert!(!decoded(&terms(Some(&spender), None, capped, None)));
+    capped.max_per_pull = Some(USDC);
+    assert!(decoded(&terms(Some(&spender), None, capped, None)));
     let no_window = terms(Some(&spender), None, out(&from, USDC, Some(0)), None);
     assert!(no_window.validate().is_err());
     let bytes = encode(&no_window);

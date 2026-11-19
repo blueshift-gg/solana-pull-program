@@ -18,7 +18,7 @@ export async function undo() {
     const [owner, merchant, sponsor, stranger] = await Promise.all([wallet({ [USDC]: 100_000_000 }), wallet({ [USDC]: 0 }), wallet(), wallet()]);
     const [account, treasury] = [await tokenAccount(owner.address), await tokenAccount(merchant.address)];
     const start = await now();
-    const allow = (max: bigint) => ({ out: { from: account, max, period: null, to: null }, notAfter: null, notBefore: start, in: null, spender: merchant.address });
+    const allow = (max: bigint) => ({ out: { from: account, max, period: null, maxPerPull: null, to: null }, notAfter: null, notBefore: start, in: null, spender: merchant.address });
 
     // Three mandates, numbered as they are created
     for (const max of [1_000_000n, 2_000_000n, 3_000_000n]) await send(sponsor, (await onboardInstructions(rpc, { authority: owner, payer: sponsor, terms: allow(max) })).instructions);

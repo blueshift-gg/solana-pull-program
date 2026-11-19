@@ -158,7 +158,10 @@ impl<'a> Pull<'a> {
             return Err(PullError::InvalidDestination.into());
         }
 
-        // The amount must fit what is left of the limit in this window
+        // The amount must fit one pull, and what is left of the limit in this window
+        if out.max_per_pull.is_some_and(|m| amount > m) {
+            return Err(PullError::LimitExceeded.into());
+        }
         let window = terms.window(now);
         let spent = mandate.spent(window).checked_add(amount);
         let spent = spent.ok_or(PullError::Overflow)?;

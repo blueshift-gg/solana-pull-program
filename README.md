@@ -52,7 +52,7 @@ then, and there is nothing between the two transfers to trust. Another program c
 
 ```text
 Terms { spender?, not_before, not_after?, out, in? }
-Out   { from, to?, max, period? }
+Out   { from, to?, max, period?, max_per_pull? }
 In    { to, min }
 ```
 
@@ -66,6 +66,8 @@ Without `to` the spender chooses.
 
 The limit counts over fixed windows of `period` seconds that start at `not_before`, and
 what is unused in a window does not carry over. With no period it counts in total.
+`max_per_pull`, at most `max`, caps what one pull may take, as an agent's budget does:
+"1 USDC a day, at most 0.10 at a time".
 
 `in` is what must come back: "each pull, at least `min` arrives in `to`", an account of
 the owner, in its mint. It is a total, not a rate: a spender that takes less still
@@ -103,7 +105,7 @@ by the owner creates one, so everything a spender can do is on chain. A wallet l
 owner's mandates by their numbers, with no scan of the program's accounts.
 
 ```text
-Mandate   PDA ["mandate", authority, index]                    213 bytes, 253 with `in`
+Mandate   PDA ["mandate", authority, index]                    221 bytes, 261 with `in`
   header  tag · authority · payer · index                      who, written once
   usage   consumed · window                                    the only bytes Pull writes
   terms   spender · not_before · not_after · out · in?         what, written once
@@ -111,9 +113,9 @@ Mandate   PDA ["mandate", authority, index]                    213 bytes, 253 wi
 
 Every field sits at a fixed offset: the spender at 89, `out.from` at 137, `out.to` at
 169. An absent value is all zeroes, never a valid present one: the zero key is the
-system program, which is no token account and never signs, and an expiry at 0 or a
-period of zero seconds is invalid. `in` is a suffix, present only when the terms have
-one.
+system program, which is no token account and never signs, and an expiry at 0, a
+period of zero seconds or a cap per pull of zero is invalid. `in` is a suffix, present
+only when the terms have one.
 
 `authority` is checked against the owner of `out.from` on every pull. A mandate belongs
 to the owner that signed it, not to the token account: when an account changes owner,

@@ -90,7 +90,7 @@ if (process.env["NODE_ENV"] !== "production") {
     [SOLANA_PULL_ERROR__INVALID_TAG]: `The account's tag is not the expected type`,
     [SOLANA_PULL_ERROR__INVALID_TARGET]: `A token account or mint is not the one the terms name, or not the authority's`,
     [SOLANA_PULL_ERROR__INVALID_TERMS]: `The terms break a validity rule (\`Terms::validate\`)`,
-    [SOLANA_PULL_ERROR__LIMIT_EXCEEDED]: `The pull exceeds the limit`,
+    [SOLANA_PULL_ERROR__LIMIT_EXCEEDED]: `The pull exceeds what one pull may take, or what is left of the limit`,
     [SOLANA_PULL_ERROR__MALFORMED_TERMS]: `The terms bytes are not a canonical encoding`,
     [SOLANA_PULL_ERROR__NOT_CLOSABLE]: `A mandate that can still pull: only its authority closes it`,
     [SOLANA_PULL_ERROR__NOT_DELEGATE]: `The engine is not the delegate of the account pulled from: it was never enabled, another \`Approve\` replaced it, or its approval ran out`,
