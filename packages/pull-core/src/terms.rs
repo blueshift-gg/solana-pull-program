@@ -99,20 +99,16 @@ impl<'a> Terms<'a> {
         Ok(terms)
     }
 
-    /// Everything a decoder must reject beyond malformed bytes.
-    pub fn validate(&self) -> Result<()> {
+    /// Everything `decode` must reject beyond malformed bytes. Zeroes never
+    /// reach it as a present value: `decode` reads them as absent.
+    fn validate(&self) -> Result<()> {
         // Bounded timestamps keep time arithmetic from overflowing
         let time = |t: i64| (0..=MAX_TIME).contains(&t);
         let window = time(self.not_before)
             && self
                 .not_after
                 .is_none_or(|t| t > self.not_before && time(t));
-        let out = self.out.max > 0
-            && self.out.period != Some(0)
-            && self
-                .out
-                .max_per_pull
-                .is_none_or(|m| m > 0 && m <= self.out.max);
+        let out = self.out.max > 0 && self.out.max_per_pull.is_none_or(|m| m <= self.out.max);
         let r#in = self.r#in.is_none_or(|x| x.to.ne(&NONE) && x.min > 0);
         // Something must be bound: who takes, where it goes, or what comes
         // back. Otherwise the terms pay whoever finds them

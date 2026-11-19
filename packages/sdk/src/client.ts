@@ -12,7 +12,7 @@ import {
     getBase64Encoder,
     getU64Encoder,
     type Instruction,
-    type Option,
+    unwrapOption,
     type ReadonlyUint8Array,
     type Rpc,
     type SolanaRpcApi,
@@ -31,7 +31,8 @@ import {
     getCreateInstructionAsync,
     getOpenInstructionAsync,
     getPullInstruction,
-    getTermsCodec,
+    getMandateTagBytes,
+    getProfileDecoder,
     identifySolanaPullEvent,
     parseClosedEvent,
     parseCreatedEvent,
@@ -41,21 +42,21 @@ import {
     type Mandate,
     SOLANA_PULL_PROGRAM_ADDRESS,
     SolanaPullEvent,
+    EVENT_DISCRIMINATOR,
+    MANDATE_HEADER_LENGTH,
+    MAX_TIME,
     type Terms,
     type TermsArgs,
+    TOKEN_PROGRAM_ADDRESS,
 } from './generated/index.ts';
 
-type Client = Rpc<SolanaRpcApi>;
-const TOKEN_PROGRAM = address('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
-const CLOCK = address('SysvarC1ock11111111111111111111111111111111');
-/** 9999-12-31T23:59:59Z: the latest timestamp terms may hold. */
-const MAX_TIME = 253_402_300_799n;
+const SYSTEM_PROGRAM = '11111111111111111111111111111111';
 
-const some = <T>(o: Option<T>): T | null => (o.__option === 'Some' ? o.value : null);
+type Client = Rpc<SolanaRpcApi>;
+const CLOCK = address('SysvarC1ock11111111111111111111111111111111');
+
 const view = (data: ReadonlyUint8Array) => new DataView(data.buffer, data.byteOffset, data.byteLength);
 const pda = async (found: Promise<readonly [Address, number]>) => (await found)[0];
-/** Terms as an integration writes them, in the shape the accounts hold. */
-export const terms = (args: TermsArgs): Terms => getTermsCodec().decode(getTermsCodec().encode(args));
 
 /**
  * Whether the program accepts these terms, by the same rules as `pull-core`
@@ -64,12 +65,14 @@ export const terms = (args: TermsArgs): Terms => getTermsCodec().decode(getTerms
  */
 export function isValid(t: Terms): boolean {
     const time = (at: bigint) => at >= 0n && at <= MAX_TIME;
-    const [notAfter, back] = [some(t.notAfter), some(t.in)];
+    const [notAfter, back] = [unwrapOption(t.notAfter), unwrapOption(t.in)];
     const window = time(t.notBefore) && (notAfter === null || (notAfter > t.notBefore && time(notAfter)));
-    const bound = some(t.spender) !== null || some(t.out.to) !== null || back !== null;
-    const perPull = some(t.out.maxPerPull);
+    const bound = unwrapOption(t.spender) !== null || unwrapOption(t.out.to) !== null || back !== null;
+    // The zero key is no account: `in` must name one
+    const into = !back || (back.to !== SYSTEM_PROGRAM && back.min > 0n);
+    const perPull = unwrapOption(t.out.maxPerPull);
     const out = t.out.max > 0n && (perPull === null || (perPull > 0n && perPull <= t.out.max));
-    return window && out && (!back || back.min > 0n) && bound;
+    return window && out && into && bound;
 }
 
 /**
@@ -107,7 +110,7 @@ export const enableInstruction = (p: { owner: TransactionSigner; account: Addres
         { address: p.owner.address, role: AccountRole.READONLY_SIGNER, signer: p.owner } as AccountMeta,
     ],
     data: Uint8Array.of(4, ...getU64Encoder().encode(p.amount ?? 2n ** 64n - 1n)),
-    programAddress: p.tokenProgram ?? TOKEN_PROGRAM,
+    programAddress: p.tokenProgram ?? TOKEN_PROGRAM_ADDRESS,
 });
 
 /**
@@ -133,13 +136,15 @@ export async function onboardInstructions(rpc: Client, p: { authority: Transacti
 /**
  * Take `amount` under a mandate (`fetchMandateStatus` or `fetchMandates` give
  * it). `to` is where the tokens go unless the terms name it; `payFrom` is the
- * spender's account that pays what must come back; `reference`
- * is the spender's own 32-byte id for this pull, which the event carries.
- * The mints and token programs are read from the token accounts the terms name.
+ * spender's account that pays what must come back, and `pay` how much it
+ * sends: `in.min` unless the mint takes a transfer fee, which the spender
+ * adds. `reference` is the spender's own 32-byte id for this pull, which the
+ * event carries. The mints and token programs are read from the token
+ * accounts the terms name.
  */
-export async function pullInstruction(rpc: Client, p: { spender: TransactionSigner; mandate: Account<Mandate>; amount: bigint; to?: Address; payFrom?: Address; reference?: Uint8Array }) {
+export async function pullInstruction(rpc: Client, p: { spender: TransactionSigner; mandate: Account<Mandate>; amount: bigint; to?: Address; payFrom?: Address; pay?: bigint; reference?: Uint8Array }) {
     const { authority, terms: t } = p.mandate.data;
-    const [to, back] = [some(t.out.to) ?? p.to, some(t.in)];
+    const [to, back] = [unwrapOption(t.out.to) ?? p.to, unwrapOption(t.in)];
     if (!to) throw new Error('the terms do not name where the tokens go: pass `to`');
     if (back && !p.payFrom) throw new Error('something must come back: pass `payFrom`');
     const [from, payTo] = await fetchAccounts(rpc, [t.out.from, ...(back ? [back.to] : [])]);
@@ -151,6 +156,7 @@ export async function pullInstruction(rpc: Client, p: { spender: TransactionSign
         from: t.out.from,
         mandate: p.mandate.address,
         mint: mint(from),
+        pay: back ? (p.pay ?? back.min) : 0n,
         profile: await pda(findProfilePda({ authority })),
         reference: p.reference ?? null,
         spender: p.spender,
@@ -162,7 +168,7 @@ export async function pullInstruction(rpc: Client, p: { spender: TransactionSign
 
 /**
  * End a mandate and return its rent to whoever paid it: its authority at any
- * time, anyone once it expired or was invalidated.
+ * time, anyone once it can never pull again: expired, invalidated or used up.
  */
 export const closeMandateInstruction = async (p: { closer: TransactionSigner; mandate: Account<Mandate> }) =>
     getCloseInstruction({ closer: p.closer, mandate: p.mandate.address, payer: p.mandate.data.payer, profile: await pda(findProfilePda({ authority: p.mandate.data.authority })) });
@@ -192,16 +198,16 @@ export async function fetchMandateStatus(rpc: Client, mandate: Address) {
     const { authority, index, terms: t, consumed, window: counted } = found.data;
     const profile = await pda(findProfilePda({ authority }));
     const [profileData, from, clock] = await accounts(rpc, [profile, t.out.from, CLOCK]);
-    // Profile: tag, authority, mandates, stale at 41. Clock: unix_timestamp at 32
-    const [stale, now] = [profileData ? view(profileData).getBigUint64(41, true) : 0n, view(clock!).getBigInt64(32, true)];
-    const period = some(t.out.period);
+    // Clock: unix_timestamp at 32
+    const [stale, now] = [profileData ? getProfileDecoder().decode(profileData).stale : 0n, view(clock!).getBigInt64(32, true)];
+    const period = unwrapOption(t.out.period);
     const window = period === null ? 0n : (now - t.notBefore) / BigInt(period);
     const left = t.out.max - (window === counted ? consumed : 0n);
     const held = from ? seat(from) : { allowance: 0n, balance: 0n, enabled: false };
-    const notAfter = some(t.notAfter);
+    const notAfter = unwrapOption(t.notAfter);
     const state: MandateState =
         index <= stale ? 'invalidated' : now < t.notBefore ? 'notStarted' : notAfter !== null && now >= notAfter ? 'expired' : !held.enabled ? 'notDelegate' : 'active';
-    const least = [left, some(t.out.maxPerPull) ?? left, held.allowance, held.balance].reduce((a, b) => (a < b ? a : b));
+    const least = [left, unwrapOption(t.out.maxPerPull) ?? left, held.allowance, held.balance].reduce((a, b) => (a < b ? a : b));
     return { allowance: held.allowance, available: state === 'active' ? least : 0n, balance: held.balance, left, mandate: found, state };
 }
 
@@ -222,10 +228,10 @@ export async function fetchMandates(rpc: Client, by: { authority: Address } | { 
         }
         return found;
     }
-    // Mandate: tag 1, an 89-byte header, then the terms: spender at 89
+    // A mandate, by its tag, whose terms (after the header) start with this spender
     const filters = [
-        { memcmp: { bytes: getBase58Decoder().decode(Uint8Array.of(1)) as Base58EncodedBytes, encoding: 'base58' as const, offset: 0n } },
-        { memcmp: { bytes: by.spender as string as Base58EncodedBytes, encoding: 'base58' as const, offset: 89n } },
+        { memcmp: { bytes: getBase58Decoder().decode(getMandateTagBytes()) as Base58EncodedBytes, encoding: 'base58' as const, offset: 0n } },
+        { memcmp: { bytes: by.spender as string as Base58EncodedBytes, encoding: 'base58' as const, offset: MANDATE_HEADER_LENGTH } },
     ];
     const all = await rpc.getProgramAccounts(SOLANA_PULL_PROGRAM_ADDRESS, { encoding: 'base64', filters }).send();
     return all.map(({ account, pubkey }) => {
@@ -263,7 +269,7 @@ export function parseEvents(transaction: {
         for (const ix of instructions) {
             if (keys[ix.programIdIndex] !== SOLANA_PULL_PROGRAM_ADDRESS) continue;
             const data = new Uint8Array(getBase58Encoder().encode(ix.data));
-            if (data[0] !== 255) continue;
+            if (data[0] !== EVENT_DISCRIMINATOR) continue;
             const [type, parse] = EVENTS[identifySolanaPullEvent(data)];
             events.push({ type, ...parse(data) } as PullEvent);
         }

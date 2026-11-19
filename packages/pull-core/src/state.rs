@@ -25,13 +25,6 @@ macro_rules! account {
             /// # Safety
             /// `bytes` holds at least `size_of::<Self>()` bytes.
             #[inline(always)]
-            pub unsafe fn from_bytes_unchecked(bytes: &[u8]) -> &Self {
-                &*(bytes.as_ptr() as *const Self)
-            }
-
-            /// # Safety
-            /// `bytes` holds at least `size_of::<Self>()` bytes.
-            #[inline(always)]
             pub unsafe fn from_bytes_unchecked_mut(bytes: &mut [u8]) -> &mut Self {
                 &mut *(bytes.as_mut_ptr() as *mut Self)
             }
@@ -41,11 +34,11 @@ macro_rules! account {
 
 /// An authority's profile. Its mandates are numbered from 1 as they are
 /// created; `mandates` is the last number used, and every mandate numbered
-/// `stale` or less is invalid. It is never closed: a profile opened again would count from zero
-/// and bring old mandates back.
+/// `stale` or less is invalid. It is never closed: a profile opened again
+/// would count from zero and bring old mandates back.
 #[repr(C)]
 pub struct Profile {
-    tag: [u8; 1],
+    pub tag: u8,
     pub authority: Pubkey,
     mandates: [u8; 8],
     stale: [u8; 8],
@@ -54,7 +47,6 @@ pub struct Profile {
 account!(Profile);
 
 impl Profile {
-    field!(tag, set_tag, u8);
     field!(mandates, set_mandates, u64);
     field!(stale, set_stale, u64);
 }
@@ -63,7 +55,7 @@ impl Profile {
 /// terms. `consumed` and `window` are the only bytes `Pull` writes.
 #[repr(C)]
 pub struct Mandate {
-    tag: [u8; 1],
+    pub tag: u8,
     /// Signed `Create`; must own the account the terms take from.
     pub authority: Pubkey,
     /// Paid the rent; refunded by `Close`.
@@ -80,16 +72,16 @@ pub struct Mandate {
 account!(Mandate);
 
 impl Mandate {
-    field!(tag, set_tag, u8);
     field!(window, set_window, u64);
     field!(consumed, set_consumed, u64);
     field!(index, set_index, u64);
 
     /// What the limit has used in `window`: a new window starts with nothing used.
     pub fn spent(&self, window: u64) -> u64 {
-        match window == self.window() {
-            true => self.consumed(),
-            false => 0,
+        if window == self.window() {
+            self.consumed()
+        } else {
+            0
         }
     }
 }

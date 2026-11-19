@@ -491,6 +491,18 @@
           },
           {
             "kind": "instructionArgumentNode",
+            "name": "pay",
+            "docs": [
+              "What the spender sends to `in.to`: at least `in.min`, more if the mint takes a transfer fee. 0 when the terms have no `in`."
+            ],
+            "type": {
+              "kind": "numberTypeNode",
+              "format": "u64",
+              "endian": "le"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
             "name": "reference",
             "docs": [
               "The spender's own id for this pull. Emitted, not stored."
@@ -524,7 +536,7 @@
         "kind": "instructionNode",
         "name": "close",
         "docs": [
-          "End a mandate and return its rent: its authority at any time, anyone once it expired or was invalidated."
+          "End a mandate and return its rent: its authority at any time, anyone once it can never pull again: expired, invalidated or used up."
         ],
         "optionalAccountStrategy": "omitted",
         "accounts": [
@@ -1586,6 +1598,67 @@
         "value": {
           "kind": "publicKeyValueNode",
           "publicKey": "58eSE1WJDvzrwz7BZ23sbsDiqa75pxetzkyRyUcPwb6E"
+        }
+      },
+      {
+        "kind": "constantNode",
+        "name": "tokenProgramAddress",
+        "type": {
+          "kind": "publicKeyTypeNode"
+        },
+        "value": {
+          "kind": "publicKeyValueNode",
+          "publicKey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      },
+      {
+        "kind": "constantNode",
+        "name": "token2022ProgramAddress",
+        "type": {
+          "kind": "publicKeyTypeNode"
+        },
+        "value": {
+          "kind": "publicKeyValueNode",
+          "publicKey": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+        }
+      },
+      {
+        "kind": "constantNode",
+        "name": "eventDiscriminator",
+        "type": {
+          "kind": "numberTypeNode",
+          "format": "u8",
+          "endian": "le"
+        },
+        "value": {
+          "kind": "numberValueNode",
+          "number": 255
+        }
+      },
+      {
+        "kind": "constantNode",
+        "name": "maxTime",
+        "type": {
+          "kind": "numberTypeNode",
+          "format": "i64",
+          "endian": "le"
+        },
+        "value": {
+          "kind": "numberValueNode",
+          "number": 253402300799
+        }
+      },
+      {
+        "kind": "constantNode",
+        "name": "mandateHeaderLength",
+        "type": {
+          "kind": "numberTypeNode",
+          "format": "u64",
+          "endian": "le"
+        },
+        "value": {
+          "kind": "numberValueNode",
+          "number": 89
         }
       }
     ]

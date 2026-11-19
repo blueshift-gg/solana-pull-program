@@ -279,8 +279,9 @@ pub fn create(authority: &Address, payer: &Address, index: u64, bytes: &[u8]) ->
 
 /// `(from, mint, to)`: the token account taken from, its mint, and where the tokens go.
 pub type Take = (Address, Address, Address);
-/// `(pay_from, pay_mint, pay_to)`: the spender's account, the mint the authority receives, the account the terms name.
-pub type Pay = (Address, Address, Address);
+/// `(pay_from, pay_mint, pay_to, pay)`: the spender's account, the mint that
+/// comes back, the account the terms name, and how much the spender sends.
+pub type Pay = (Address, Address, Address, u64);
 
 fn legs((from, mint, to): Take, payment: Option<Pay>, token_program: Address) -> Vec<AccountMeta> {
     let mut accounts = vec![
@@ -291,7 +292,7 @@ fn legs((from, mint, to): Take, payment: Option<Pay>, token_program: Address) ->
         AccountMeta::new_readonly(PROGRAM, false),
         AccountMeta::new_readonly(token_program, false),
     ];
-    if let Some((pay_from, pay_mint, pay_to)) = payment {
+    if let Some((pay_from, pay_mint, pay_to, _)) = payment {
         accounts.extend([
             AccountMeta::new(pay_from, false),
             AccountMeta::new_readonly(pay_mint, false),
@@ -302,7 +303,8 @@ fn legs((from, mint, to): Take, payment: Option<Pay>, token_program: Address) ->
 }
 
 /// `spender` takes `amount` under the `index`-th mandate of `authority`,
-/// paying what the authority receives if the terms say so.
+/// and pays what must come back if the terms say so. A reference, if any,
+/// goes after the data: `ix.data.extend(reference)`.
 pub fn pull(
     spender: &Address,
     authority: &Address,
@@ -312,30 +314,7 @@ pub fn pull(
     payment: Option<Pay>,
     token_program: Address,
 ) -> Instruction {
-    pull_for(
-        spender,
-        authority,
-        index,
-        take,
-        amount,
-        payment,
-        token_program,
-        &[],
-    )
-}
-
-/// A pull that carries the spender's `reference` for it: 32 bytes, or none.
-#[allow(clippy::too_many_arguments)]
-pub fn pull_for(
-    spender: &Address,
-    authority: &Address,
-    index: u64,
-    take: Take,
-    amount: u64,
-    payment: Option<Pay>,
-    token_program: Address,
-    reference: &[u8],
-) -> Instruction {
+    let pay = payment.map_or(0, |(_, _, _, pay)| pay);
     let mut accounts = vec![
         AccountMeta::new_readonly(*spender, true),
         AccountMeta::new(mandate_pda(authority, index), false),
@@ -345,7 +324,7 @@ pub fn pull_for(
     Instruction {
         program_id: PROGRAM,
         accounts,
-        data: [&[1][..], &amount.to_le_bytes(), reference].concat(),
+        data: [&[1][..], &amount.to_le_bytes(), &pay.to_le_bytes()].concat(),
     }
 }
 

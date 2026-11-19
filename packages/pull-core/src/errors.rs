@@ -65,55 +65,9 @@ pub enum PullError {
     ZeroAmount,
 }
 
-impl PullError {
-    /// Every error in code order, so clients can name a code: `ALL[code]`.
-    /// A new variant goes here too; the test below checks the order.
-    pub const ALL: [PullError; 27] = [
-        PullError::NotSigner,
-        PullError::NotMutable,
-        PullError::InvalidAccountOwner,
-        PullError::InvalidAccountLength,
-        PullError::InvalidTag,
-        PullError::InvalidSeeds,
-        PullError::AlreadyInitialized,
-        PullError::MalformedTerms,
-        PullError::InvalidTerms,
-        PullError::NotYetValid,
-        PullError::Expired,
-        PullError::InvalidSpender,
-        PullError::NotClosable,
-        PullError::InvalidPayer,
-        PullError::InvalidPull,
-        PullError::LimitExceeded,
-        PullError::InvalidTarget,
-        PullError::Overflow,
-        PullError::NotReceived,
-        PullError::InvalidEventAuthority,
-        PullError::NotDelegate,
-        PullError::AllowanceExceeded,
-        PullError::InsufficientFunds,
-        PullError::InvalidProfile,
-        PullError::Stale,
-        PullError::InvalidDestination,
-        PullError::ZeroAmount,
-    ];
-}
-
 impl From<PullError> for ProgramError {
     #[inline]
     fn from(e: PullError) -> Self {
         ProgramError::Custom(e as u32)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::PullError;
-
-    #[test]
-    fn all_lists_every_error_in_code_order() {
-        for (code, error) in PullError::ALL.iter().enumerate() {
-            assert_eq!(*error as usize, code);
-        }
     }
 }

@@ -62,7 +62,7 @@ impl<'a> TryFrom<&'a [AccountInfo]> for Invalidate<'a> {
 }
 
 impl<'a> Invalidate<'a> {
-    pub const DISCRIMINATOR: &'a u8 = &4;
+    pub const DISCRIMINATOR: u8 = 4;
 
     pub fn process(&mut self) -> ProgramResult {
         let authority = self.authority.key();
@@ -77,12 +77,10 @@ impl<'a> Invalidate<'a> {
             .ok_or(PullError::Overflow)?;
         profile.set_mandates(stale);
         profile.set_stale(stale);
-
-        // Log the Invalidate Event
         emit(
             self.engine,
             self.program,
-            *Self::DISCRIMINATOR,
+            Self::DISCRIMINATOR,
             &[authority, &stale.to_le_bytes()],
         )
     }

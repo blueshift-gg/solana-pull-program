@@ -1,11 +1,10 @@
 // For wallets: say what a transaction does with the Pull program, in rows a
 // wallet can show before the owner signs.
-import { type Address, type Instruction, type Option, type ReadonlyUint8Array } from '@solana/kit';
+import { type Address, type Instruction, type ReadonlyUint8Array, unwrapOption } from '@solana/kit';
 
-import { ENGINE_ADDRESS, parseSolanaPullInstruction, SOLANA_PULL_PROGRAM_ADDRESS, SolanaPullInstruction, type Terms } from './generated/index.ts';
+import { ENGINE_ADDRESS, parseSolanaPullInstruction, SOLANA_PULL_PROGRAM_ADDRESS, SolanaPullInstruction, type Terms, TOKEN2022_PROGRAM_ADDRESS, TOKEN_PROGRAM_ADDRESS } from './generated/index.ts';
 
-const TOKEN_PROGRAMS: string[] = ['TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'];
-const some = <T>(o: Option<T>): T | null => (o.__option === 'Some' ? o.value : null);
+const TOKEN_PROGRAMS: string[] = [TOKEN_PROGRAM_ADDRESS, TOKEN2022_PROGRAM_ADDRESS];
 
 /** One line of an approval: a label and what it says. */
 export type Row = [label: string, value: string];
@@ -39,11 +38,11 @@ function amount(raw: bigint, account: Address, tokens: Tokens): string {
 /** Terms in a wallet's words: who can take what, where it goes, what comes back, and until when. */
 export function describeTerms(terms: Terms, tokens: Tokens = {}): Row[] {
     const { out } = terms;
-    const [spender, to, back, notAfter] = [some(terms.spender), some(out.to), some(terms.in), some(terms.notAfter)];
+    const [spender, to, back, notAfter] = [unwrapOption(terms.spender), unwrapOption(out.to), unwrapOption(terms.in), unwrapOption(terms.notAfter)];
     const rows: Row[] = [
         ['Who can take it', spender ? short(spender) : 'Anyone'],
-        ['Can take', `Up to ${amount(out.max, out.from, tokens)}${some(out.period) !== null ? ` every ${span(some(out.period)!)}` : ' in total'}`],
-        ...(some(out.maxPerPull) !== null ? [['At most per payment', amount(some(out.maxPerPull)!, out.from, tokens)] as Row] : []),
+        ['Can take', `Up to ${amount(out.max, out.from, tokens)}${unwrapOption(out.period) !== null ? ` every ${span(unwrapOption(out.period)!)}` : ' in total'}`],
+        ...(unwrapOption(out.maxPerPull) !== null ? [['At most per payment', amount(unwrapOption(out.maxPerPull)!, out.from, tokens)] as Row] : []),
         ['From', short(out.from)],
         ['Goes to', to ? `Only ${short(to)}` : 'Wherever the taker chooses'],
     ];
@@ -62,7 +61,8 @@ const NO_EXPIRY = 'This does not expire. It stays usable until you cancel it.';
 export function describeInstruction(instruction: Instruction, tokens: Tokens = {}): Approval | null {
     const data = (instruction.data ?? new Uint8Array()) as ReadonlyUint8Array;
     if (TOKEN_PROGRAMS.includes(instruction.programAddress)) {
-        // SPL `Approve` (4) and `ApproveChecked` (13): source, [mint,] delegate
+        // SPL `Approve` (4) and `ApproveChecked` (13): source, [mint,] delegate; amount at 1
+        if (data.length < 9) return null;
         const delegate = data[0] === 4 ? instruction.accounts?.[1] : data[0] === 13 ? instruction.accounts?.[2] : undefined;
         if (delegate?.address !== ENGINE_ADDRESS) return null;
         const cap = new DataView(data.buffer, data.byteOffset).getBigUint64(1, true);
@@ -75,7 +75,7 @@ export function describeInstruction(instruction: Instruction, tokens: Tokens = {
         case SolanaPullInstruction.Open:
             return { rows: [], title: 'Open your profile with the Pull program' };
         case SolanaPullInstruction.Create: {
-            const never = some(parsed.data.terms.notAfter) === null;
+            const never = unwrapOption(parsed.data.terms.notAfter) === null;
             return { rows: describeTerms(parsed.data.terms, tokens), title: 'Approve a standing permission', ...(never ? { caution: NO_EXPIRY } : {}) };
         }
         case SolanaPullInstruction.Invalidate:

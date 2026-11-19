@@ -61,8 +61,9 @@ fn main() {
             2 => Some(r.next() as u32),
             _ => Some([60, 3_600, 86_400, 2_592_000, 90_061][r.below(5) as usize]),
         };
+        // Sometimes the zero key where `in` must name an account
         let receive = (r.below(2) == 0).then(|| In {
-            to: &keys[5],
+            to: if r.below(8) == 0 { &[0; 32] } else { &keys[5] },
             min: r.amount(),
         });
         let terms = Terms {
@@ -81,12 +82,15 @@ fn main() {
         };
         let mut bytes = Vec::new();
         terms.write(&mut bytes);
-        // The bytes are the truth: an absent value is zeroes, so a zero
-        // written as present reads back as absent
-        let valid = Terms::decode(&bytes).is_ok();
-        if terms.validate().is_ok() {
-            assert_eq!(Terms::decode(&bytes), Ok(terms));
+        // The bytes are the truth: whatever decodes encodes back to the same
+        // bytes, so the encoding of valid terms is canonical
+        let decoded = Terms::decode(&bytes);
+        if let Ok(read) = decoded {
+            let mut again = Vec::new();
+            read.write(&mut again);
+            assert_eq!(again, bytes);
         }
+        let valid = decoded.is_ok();
         println!(r#"{{"bytes":"{}","valid":{valid}}}"#, hex(&bytes));
     }
 }

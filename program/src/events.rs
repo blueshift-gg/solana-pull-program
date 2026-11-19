@@ -32,7 +32,7 @@ pub fn emit(
     instruction: u8,
     fields: &[&[u8]],
 ) -> ProgramResult {
-    let mut data = Event([0; 130], 0);
+    let mut data = Event([0; EVENT_LEN], 0);
     data.put(&[EVENT_DISCRIMINATOR, instruction]);
     fields.iter().for_each(|f| data.put(f));
 
@@ -52,8 +52,11 @@ pub fn emit(
     )
 }
 
-/// Every event fits: discriminators plus at most four 32-byte fields.
-struct Event([u8; 130], usize);
+/// The largest event, `Pull`'s: two discriminators, mandate, spender,
+/// amount, paid and reference.
+const EVENT_LEN: usize = 2 + 32 + 32 + 8 + 8 + 32;
+
+struct Event([u8; EVENT_LEN], usize);
 
 impl Sink for Event {
     fn put(&mut self, bytes: &[u8]) {

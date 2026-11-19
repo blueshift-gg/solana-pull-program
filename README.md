@@ -124,7 +124,7 @@ bring the old owner's mandates back. `window` is the window of the limit that
 `consumed` counts: windows of the period from `not_before`, or always 0 for a limit in
 total.
 
-Whoever pays the rent is always a separate account from whoever signs, so a merchant can
+Whoever pays the rent signs for it, and it need not be the owner, so a merchant can
 sponsor a subscriber. The owner ends a mandate at any time with `Close`. Anyone closes
 one that can never pull again: it expired, the owner invalidated it, or its limit in
 total is used up. Either way it is gone for good, and the rent goes straight back to its
@@ -161,7 +161,8 @@ it stops its mandates too. Either way the same `Approve` again restores them as 
 were: nothing is created anew.
 
 Token-2022 mints work, transfer fees included: the owner never gives up more than the
-limit, and never receives less than the terms say. A mint with a transfer hook does not:
+limit, and never receives less than the terms say. What counts toward `in.min` is what
+arrives, so the spender says how much it sends (`pay`) and adds the fee itself. A mint with a transfer hook does not:
 the program passes the hook no accounts, so the transfer fails.
 
 A pull must take something (`ZeroAmount`). One that cannot move the tokens says why:
@@ -178,19 +179,19 @@ LiteSVM, the instruction alone, one run each:
 
 | | CU |
 |---|---|
-| `Open` | 5.1k |
-| `Create` | 5.5k |
+| `Open` | 5.0k |
+| `Create` | 5.2k |
 | `Pull` | 4.0k |
 | `Pull` that also delivers to the owner | 5.5k |
 | `Close` | 2.0k |
 | `Invalidate` | 1.7k |
 
-Enabling, opening and creating the first mandate in one transaction measured 12.2k on a
-mainnet fork.
+Enabling, opening and creating the first mandate in one transaction measured 12.2k to
+13.8k on a mainnet fork, with the two bump searches.
 
 `Open` and `Create` pay a PDA bump search, which varies with the address: `Create`
-measured from 5.5k to 13k. The search is what makes each address canonical, so a wallet
-that lists an owner's mandates by number finds every one. The program is 42 KB.
+measured from 5.2k to 13k. The search is what makes each address canonical, so a wallet
+that lists an owner's mandates by number finds every one. The program is 39 KB.
 
 ## Build
 

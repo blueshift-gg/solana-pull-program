@@ -1,5 +1,5 @@
 use crate::events::emit;
-use crate::helpers::{check_pda, create_pda};
+use crate::helpers::create_pda;
 use crate::state::Profile;
 use pinocchio::log::sol_log;
 use pinocchio::{account_info::AccountInfo, program_error::ProgramError, ProgramResult};
@@ -25,7 +25,8 @@ use pull_core::{constants::*, errors::PullError};
 /// Account Checks:
 /// - Authority: signer
 /// - Profile: writable; the empty PDA, checked in process
-/// - Payer, SystemProgram, Engine, Program: no need to check since the CPIs fail otherwise
+/// - Payer: signer, checked in process
+/// - SystemProgram, Engine, Program: no need to check since the CPIs fail otherwise
 ///
 /// Event Data:
 /// - discriminator: u8, (255u8, 3u8)
@@ -67,29 +68,21 @@ impl<'a> TryFrom<&'a [AccountInfo]> for Open<'a> {
 }
 
 impl<'a> Open<'a> {
-    pub const DISCRIMINATOR: &'a u8 = &3;
+    pub const DISCRIMINATOR: u8 = 3;
 
     pub fn process(&mut self) -> ProgramResult {
         let authority = self.authority.key();
 
-        let seeds: [&[u8]; 2] = [PROFILE_SEED, authority];
-        let bump = check_pda(self.profile, &seeds)?;
         if self.profile.is_owned_by(&crate::ID) {
             return Err(PullError::AlreadyInitialized.into());
         }
-        create_pda(self.payer, self.profile, PROFILE_LEN, &seeds, bump)?;
+        let seeds: [&[u8]; 2] = [PROFILE_SEED, authority];
+        create_pda(self.payer, self.profile, PROFILE_LEN, &seeds)?;
         // SAFETY: the account was just created with `PROFILE_LEN` zeroed bytes.
         let profile =
             unsafe { Profile::from_bytes_unchecked_mut(self.profile.borrow_mut_data_unchecked()) };
-        profile.set_tag(PROFILE_TAG);
+        profile.tag = PROFILE_TAG;
         profile.authority = *authority;
-
-        // Log the Open Event
-        emit(
-            self.engine,
-            self.program,
-            *Self::DISCRIMINATOR,
-            &[authority],
-        )
+        emit(self.engine, self.program, Self::DISCRIMINATOR, &[authority])
     }
 }

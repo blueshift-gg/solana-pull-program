@@ -11,3 +11,17 @@ import { address, type Address } from "@solana/kit";
 export const ENGINE_ADDRESS: Address = address(
   "58eSE1WJDvzrwz7BZ23sbsDiqa75pxetzkyRyUcPwb6E",
 );
+
+export const EVENT_DISCRIMINATOR: number = 255;
+
+export const MANDATE_HEADER_LENGTH: bigint = 89n;
+
+export const MAX_TIME: bigint = 253402300799n;
+
+export const TOKEN2022_PROGRAM_ADDRESS: Address = address(
+  "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+);
+
+export const TOKEN_PROGRAM_ADDRESS: Address = address(
+  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+);

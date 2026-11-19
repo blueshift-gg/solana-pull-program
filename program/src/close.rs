@@ -74,7 +74,7 @@ impl<'a> TryFrom<&'a [AccountInfo]> for Close<'a> {
 }
 
 impl<'a> Close<'a> {
-    pub const DISCRIMINATOR: &'a u8 = &2;
+    pub const DISCRIMINATOR: u8 = 2;
 
     pub fn process(&mut self) -> ProgramResult {
         let closer = self.closer.key();
@@ -101,12 +101,10 @@ impl<'a> Close<'a> {
             return Err(PullError::InvalidPayer.into());
         }
         close(self.mandate, self.payer)?;
-
-        // Log the Close Event
         emit(
             self.engine,
             self.program,
-            *Self::DISCRIMINATOR,
+            Self::DISCRIMINATOR,
             &[self.mandate.key(), closer],
         )
     }

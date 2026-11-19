@@ -1,5 +1,5 @@
 use crate::events::emit;
-use crate::helpers::{check_pda, create_pda};
+use crate::helpers::create_pda;
 use crate::state::{profile, Mandate};
 use pinocchio::log::sol_log;
 use pinocchio::{account_info::AccountInfo, program_error::ProgramError, ProgramResult};
@@ -32,7 +32,8 @@ use pull_core::{constants::*, errors::PullError, terms::Terms};
 /// - Authority: signer
 /// - Profile: writable; the authority's, checked in process
 /// - Mandate: writable; the PDA for the next number, checked in process
-/// - Payer, SystemProgram, Engine, Program: no need to check since the CPIs fail otherwise
+/// - Payer: signer, checked in process
+/// - SystemProgram, Engine, Program: no need to check since the CPIs fail otherwise
 ///
 /// Instruction Checks:
 /// - Terms: well-formed and valid
@@ -86,7 +87,7 @@ impl<'a> TryFrom<(&'a [u8], &'a [AccountInfo])> for Create<'a> {
 }
 
 impl<'a> Create<'a> {
-    pub const DISCRIMINATOR: &'a u8 = &0;
+    pub const DISCRIMINATOR: u8 = 0;
 
     pub fn process(&mut self) -> ProgramResult {
         let authority = self.authority.key();
@@ -100,26 +101,23 @@ impl<'a> Create<'a> {
         profile.set_mandates(index);
         let index_bytes = index.to_le_bytes();
         let seeds: [&[u8]; 3] = [MANDATE_SEED, authority, &index_bytes];
-        let bump = check_pda(self.mandate, &seeds)?;
 
         // Create it and copy the terms after the header
         let len = MANDATE_LEN + self.bytes.len();
-        create_pda(self.payer, self.mandate, len, &seeds, bump)?;
+        create_pda(self.payer, self.mandate, len, &seeds)?;
         // SAFETY: the account was just created with `len` bytes, and nothing else borrows it.
         let data = unsafe { self.mandate.borrow_mut_data_unchecked() };
         data[MANDATE_LEN..len].copy_from_slice(self.bytes);
         // SAFETY: `data` holds at least the header; all fields have alignment 1.
         let mandate = unsafe { Mandate::from_bytes_unchecked_mut(data) };
-        mandate.set_tag(MANDATE_TAG);
+        mandate.tag = MANDATE_TAG;
         mandate.authority = *authority;
         mandate.payer = *self.payer.key();
         mandate.set_index(index);
-
-        // Log the Create Event
         emit(
             self.engine,
             self.program,
-            *Self::DISCRIMINATOR,
+            Self::DISCRIMINATOR,
             &[self.mandate.key(), authority],
         )
     }

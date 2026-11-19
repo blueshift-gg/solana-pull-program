@@ -11,38 +11,29 @@ use pinocchio::{
 };
 use pull_core::{constants::*, errors::PullError};
 
-/// `account` must be the PDA for `seeds`; returns its bump.
-#[inline(always)]
-pub fn check_pda(account: &AccountInfo, seeds: &[&[u8]]) -> Result<u8, ProgramError> {
-    let (key, bump) = find_program_address(seeds, &crate::ID);
-    if key.ne(account.key()) {
-        return Err(PullError::InvalidSeeds.into());
-    }
-    Ok(bump)
-}
-
-/// Create a program-owned PDA, rent paid by `payer`.
+/// Create the program-owned PDA for `seeds` (at most 3) at `account`, rent
+/// paid by `payer`. The bump is the canonical one, found here: an address at
+/// any other bump would be a second profile, or a mandate no wallet finds.
 pub fn create_pda(
     payer: &AccountInfo,
     account: &AccountInfo,
     space: usize,
     seeds: &[&[u8]],
-    bump: u8,
 ) -> ProgramResult {
-    let bump = [bump];
-    let padded: [&[u8]; 5] = core::array::from_fn(|i| match i.cmp(&seeds.len()) {
-        core::cmp::Ordering::Less => seeds[i],
-        core::cmp::Ordering::Equal => &bump,
-        core::cmp::Ordering::Greater => &[],
-    });
-    let signer_seeds = padded.map(Seed::from);
-    let signer = [Signer::from(&signer_seeds[..=seeds.len()])];
-
     // Whoever is recorded as the payer signed for it, even when the address
     // already holds its rent: the rent of a closed account goes back there
     if !payer.is_signer() {
         return Err(PullError::NotSigner.into());
     }
+    let (key, bump) = find_program_address(seeds, &crate::ID);
+    if key.ne(account.key()) {
+        return Err(PullError::InvalidSeeds.into());
+    }
+    let bump = [bump];
+    let signer_seeds: [Seed; 4] =
+        core::array::from_fn(|i| Seed::from(seeds.get(i).copied().unwrap_or(&bump)));
+    let signer = [Signer::from(&signer_seeds[..=seeds.len()])];
+
     let lamports = Rent::get()?.minimum_balance(space);
     if account.lamports() == 0 {
         return pinocchio_system::instructions::CreateAccount {
@@ -154,10 +145,7 @@ pub fn transfer(
     let bump = [ENGINE_BUMP];
     let seeds = [Seed::from(ENGINE_SEED), Seed::from(&bump)];
     let engine = [Signer::from(&seeds)];
-    let signers: &[Signer] = match as_engine {
-        true => &engine,
-        false => &[],
-    };
+    let signers: &[Signer] = if as_engine { &engine } else { &[] };
     invoke_signed(
         &Instruction {
             program_id: program,

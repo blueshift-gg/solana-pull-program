@@ -42,7 +42,9 @@ use pull_core::terms::Terms;
 ///
 /// Parameters:
 /// 1. amount: u64,
-/// 2. reference: [u8; 32],    optional: the spender's own id for this pull,
+/// 2. pay: u64,               what the spender sends back to `in.to`: at least
+///    `in.min`, more if the mint takes a transfer fee; 0 when the terms have no `in`
+/// 3. reference: [u8; 32],    optional: the spender's own id for this pull,
 ///    an invoice or an order; emitted, never stored
 ///
 /// Account Checks:
@@ -58,7 +60,7 @@ use pull_core::terms::Terms;
 /// - mandate: Pubkey,
 /// - spender: Pubkey,
 /// - amount: u64,
-/// - paid: u64,
+/// - paid: u64, (what arrived in `in.to`)
 /// - reference: [u8; 32], (zeros when the pull gave none)
 pub struct Pull<'a> {
     pub spender: &'a AccountInfo,
@@ -72,6 +74,7 @@ pub struct Pull<'a> {
     /// `[pay_from, pay_mint, pay_to]` when something must come back.
     pub payment: &'a [AccountInfo],
     pub amount: u64,
+    pub pay: u64,
     pub reference: [u8; 32],
 }
 
@@ -95,11 +98,12 @@ impl<'a> TryFrom<(&'a [u8], &'a [AccountInfo])> for Pull<'a> {
             return Err(PullError::NotMutable.into());
         }
 
-        let (amount, reference) = match data.len() {
-            8 => (data, [0; 32]),
-            40 => (&data[..8], data[8..].try_into().unwrap()),
+        let (amounts, reference) = match data.len() {
+            16 => (data, [0; 32]),
+            48 => (&data[..16], data[16..].try_into().unwrap()),
             _ => return Err(ProgramError::InvalidInstructionData),
         };
+        let (amount, pay) = amounts.split_at(8);
 
         Ok(Self {
             spender,
@@ -112,13 +116,14 @@ impl<'a> TryFrom<(&'a [u8], &'a [AccountInfo])> for Pull<'a> {
             program,
             payment,
             amount: u64::from_le_bytes(amount.try_into().unwrap()),
+            pay: u64::from_le_bytes(pay.try_into().unwrap()),
             reference,
         })
     }
 }
 
 impl<'a> Pull<'a> {
-    pub const DISCRIMINATOR: &'a u8 = &1;
+    pub const DISCRIMINATOR: u8 = 1;
 
     pub fn process(&mut self) -> ProgramResult {
         let now = Clock::get()?.unix_timestamp;
@@ -172,12 +177,10 @@ impl<'a> Pull<'a> {
         mandate.set_window(window);
 
         let paid = self.settle(&authority, &terms)?;
-
-        // Log the Pull Event
         emit(
             self.engine,
             self.program,
-            *Self::DISCRIMINATOR,
+            Self::DISCRIMINATOR,
             &[
                 self.mandate.key(),
                 self.spender.key(),
@@ -189,8 +192,8 @@ impl<'a> Pull<'a> {
     }
 
     /// Take the amount as the delegate, only from the authority's own account.
-    /// If the terms say what must come back, the spender pays it, and all of
-    /// it must arrive. Returns what was paid.
+    /// If the terms say what must come back, the spender pays `pay`, and at
+    /// least `in.min` must arrive. Returns what arrived.
     fn settle(&self, authority: &Pubkey, terms: &Terms) -> Result<u64, ProgramError> {
         let amount = self.amount;
         // `mint` must be the mint of `from`: the terms name only the account
@@ -215,6 +218,10 @@ impl<'a> Pull<'a> {
         )?;
 
         let Some(back) = terms.r#in else {
+            // Nothing to pay for: a payment would go nowhere
+            if self.pay != 0 {
+                return Err(ProgramError::InvalidInstructionData);
+            }
             return Ok(0);
         };
         let [pay_from, pay_mint, pay_to, ..] = self.payment else {
@@ -235,13 +242,15 @@ impl<'a> Pull<'a> {
             pay_mint,
             pay_to,
             self.spender,
-            back.min,
+            self.pay,
             false,
         )?;
+        // What arrived, after any transfer fee, is what counts
         let after = balance(pay_to, pay_mint.key(), authority)?;
-        if after.checked_sub(before).is_none_or(|got| got < back.min) {
+        let got = after.checked_sub(before).ok_or(PullError::NotReceived)?;
+        if got < back.min {
             return Err(PullError::NotReceived.into());
         }
-        Ok(back.min)
+        Ok(got)
     }
 }

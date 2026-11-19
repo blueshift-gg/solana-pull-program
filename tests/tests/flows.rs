@@ -133,7 +133,7 @@ fn the_owner_ends_every_mandate_at_once_and_they_close() {
     // Another wallet's profile does not vouch for this one's mandates
     let accounts = (user.usdc, f.usdc, merchant.usdc);
     let spender = merchant.address();
-    let mut ix = pull_for(&spender, &owner, 2, accounts, USDC, None, TOKEN, &[]);
+    let mut ix = pull_tests::pull(&spender, &owner, 2, accounts, USDC, None, TOKEN);
     ix.accounts[2].pubkey = profile_pda(&other.address());
     assert!(refused(
         f.send(&[ix], &[&merchant.key]),
@@ -246,7 +246,7 @@ fn dca_runs_once_a_day_for_anyone_who_delivers() {
 
     let run = |f: &mut Fixture, keeper: &Wallet, amount: u64| {
         let take = (user.usdc, f.usdc, keeper.usdc);
-        let pay = Some((keeper.sol, f.sol, user.sol));
+        let pay = Some((keeper.sol, f.sol, user.sol, 50_000_000));
         let ix = pull(&keeper.address(), &owner, 1, take, amount, pay, TOKEN);
         f.send(&[ix], &[&keeper.key])
     };
@@ -320,6 +320,98 @@ fn a_mandate_reaches_only_its_authoritys_accounts() {
     f.enable(&heir, &victim.usdc, u64::MAX);
     assert!(refused(pull_victims(&mut f), PullError::InvalidTarget));
     assert_eq!(f.balance(&victim.usdc), 99 * USDC);
+}
+
+/// `Create` takes only valid terms: something bound, a limit of something,
+/// a cap per pull within it, an expiry after the start, and `in` naming an account.
+#[test]
+fn create_takes_only_valid_terms() {
+    let mut f = Fixture::new();
+    let user = f.wallet(0, 0);
+    let (owner, payee) = (user.address(), f.wallet(0, 0));
+    let (from, to, spender) = (
+        user.usdc.to_bytes(),
+        payee.usdc.to_bytes(),
+        payee.address().to_bytes(),
+    );
+    let monthly = out(&from, 10 * USDC, MONTHLY);
+    let create_with =
+        |f: &mut Fixture, terms: &pull_core::terms::Terms, wanted: Option<PullError>| {
+            let result = f.send(
+                &[create(
+                    &owner,
+                    &owner,
+                    f.profile(&owner).0 + 1,
+                    &encode(terms),
+                )],
+                &[&user.key],
+            );
+            match wanted {
+                None => result.map(|_| ()).unwrap(),
+                Some(error) => assert!(refused(result, error), "{terms:?}"),
+            }
+        };
+
+    // Nothing bound: anyone may spend, to anywhere, and nothing comes back
+    create_with(
+        &mut f,
+        &terms(None, None, monthly, None),
+        Some(PullError::InvalidTerms),
+    );
+    // A limit of nothing, a cap per pull above the limit, an expiry not after the start
+    create_with(
+        &mut f,
+        &terms(Some(&spender), None, out(&from, 0, None), None),
+        Some(PullError::InvalidTerms),
+    );
+    let mut capped = out(&from, USDC, None);
+    capped.max_per_pull = Some(USDC + 1);
+    create_with(
+        &mut f,
+        &terms(Some(&spender), None, capped, None),
+        Some(PullError::InvalidTerms),
+    );
+    create_with(
+        &mut f,
+        &terms(Some(&spender), Some(NOW), monthly, None),
+        Some(PullError::InvalidTerms),
+    );
+    // `in` must name an account: the zero key is none
+    let nowhere = In {
+        to: &[0; 32],
+        min: 3,
+    };
+    create_with(
+        &mut f,
+        &terms(None, None, monthly, Some(nowhere)),
+        Some(PullError::InvalidTerms),
+    );
+    // Bytes of any other length are not terms
+    let mut ix = create(
+        &owner,
+        &owner,
+        f.profile(&owner).0 + 1,
+        &encode(&terms(Some(&spender), None, monthly, None)),
+    );
+    ix.data.pop();
+    assert!(refused(
+        f.send(&[ix], &[&user.key]),
+        PullError::MalformedTerms
+    ));
+
+    // Anyone, but only to a named account; anyone, as long as something comes back;
+    // a cap per pull equal to the limit
+    let mut pinned = monthly;
+    pinned.to = Some(&to);
+    create_with(&mut f, &terms(None, None, pinned, None), None);
+    create_with(
+        &mut f,
+        &terms(None, None, monthly, Some(In { to: &to, min: 3 })),
+        None,
+    );
+    capped.max_per_pull = Some(USDC);
+    create_with(&mut f, &terms(Some(&spender), None, capped, None), None);
+    assert_eq!(f.profile(&owner), (3, 0));
 }
 
 /// The owner names where the money goes. Then whoever holds the spender's
@@ -472,7 +564,7 @@ fn substituted_accounts_are_refused() {
     f.send(&[create(&owner, &owner, 1, &order)], &[&user.key])
         .unwrap();
     let pull_with = |f: &mut Fixture, change: &dyn Fn(&mut solana_instruction::Instruction)| {
-        let pay = Some((thief.sol, f.sol, user.sol));
+        let pay = Some((thief.sol, f.sol, user.sol, SOL));
         let mut ix = pull(&key, &owner, 1, take, 10 * USDC, pay, TOKEN);
         change(&mut ix);
         f.send(&[ix], &[&thief.key])
@@ -576,7 +668,8 @@ fn a_pull_carries_the_spenders_reference() {
     let pull = |f: &mut Fixture, reference: &[u8]| {
         let accounts = (user.usdc, f.usdc, merchant.usdc);
         let (m, u) = (merchant.address(), user.address());
-        let ix = pull_for(&m, &u, 1, accounts, USDC, None, TOKEN, reference);
+        let mut ix = pull(&m, &u, 1, accounts, USDC, None, TOKEN);
+        ix.data.extend(reference);
         f.send(&[ix], &[&merchant.key])
     };
     let event = |meta: litesvm::types::TransactionMetadata| {
@@ -592,8 +685,8 @@ fn a_pull_carries_the_spenders_reference() {
 }
 
 /// A Token-2022 transfer fee comes out of what arrives. The payer never gives
-/// up more than the limit, and a payment in such a token is refused unless
-/// the authority receives all of it.
+/// up more than the limit, and a payment in such a token counts only what
+/// arrives: the spender sends enough to cover the fee.
 #[test]
 fn a_fee_token_never_shorts_the_authority() {
     use spl_token_2022_interface::extension::transfer_fee::instruction::initialize_transfer_fee_config;
@@ -651,8 +744,8 @@ fn a_fee_token_never_shorts_the_authority() {
     assert_eq!(held(&f, &user_fee), 90 * USDC);
     assert_eq!(held(&f, &merchant_fee), 110 * USDC - USDC / 10);
 
-    // Receiving the fee token: what arrives is short, so the pull is refused
-    let limits = out(&user_usdc, 10 * USDC, None);
+    // Receiving the fee token: the minimum alone arrives short, so it is refused
+    let limits = out(&user_usdc, 20 * USDC, None);
     let receive = In {
         to: &user_fee_key,
         min: 10 * USDC,
@@ -661,17 +754,22 @@ fn a_fee_token_never_shorts_the_authority() {
     f.send(&[create(&owner, &owner, 2, &bytes)], &[&user.key])
         .unwrap();
     let take = (user.usdc, f.usdc, merchant.usdc);
-    let pay = Some((merchant_fee, mint, user_fee));
-    let mut ix = pull(&spender, &owner, 2, take, 10 * USDC, pay, TOKEN);
-    ix.accounts
-        .push(solana_instruction::AccountMeta::new_readonly(
-            TOKEN_2022, false,
-        ));
-    assert!(refused(
-        f.send(&[ix], &[&merchant.key]),
-        PullError::NotReceived
-    ));
+    let pay_back = |f: &mut Fixture, pay: u64| {
+        let payment = Some((merchant_fee, mint, user_fee, pay));
+        let mut ix = pull(&spender, &owner, 2, take, 10 * USDC, payment, TOKEN);
+        ix.accounts
+            .push(solana_instruction::AccountMeta::new_readonly(
+                TOKEN_2022, false,
+            ));
+        f.send(&[ix], &[&merchant.key])
+    };
+    assert!(refused(pay_back(&mut f, 10 * USDC), PullError::NotReceived));
     assert_eq!(f.balance(&user.usdc), 100 * USDC);
+    // Sending the minimum and the 1% fee on it, the minimum arrives
+    let before = held(&f, &user_fee);
+    pay_back(&mut f, 10 * USDC + USDC / 10 + 1_100).unwrap();
+    assert!(held(&f, &user_fee) - before >= 10 * USDC);
+    assert_eq!(f.balance(&user.usdc), 90 * USDC);
 }
 
 /// A reference model of the limit, run against the program on random

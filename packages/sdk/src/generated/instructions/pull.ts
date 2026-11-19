@@ -140,12 +140,16 @@ export type PullInstruction<
 export type PullInstructionData = {
   discriminator: number;
   amount: bigint;
+  /** What the spender sends to `in.to`: at least `in.min`, more if the mint takes a transfer fee. 0 when the terms have no `in`. */
+  pay: bigint;
   /** The spender's own id for this pull. Emitted, not stored. */
   reference: Option<ReadonlyUint8Array>;
 };
 
 export type PullInstructionDataArgs = {
   amount: number | bigint;
+  /** What the spender sends to `in.to`: at least `in.min`, more if the mint takes a transfer fee. 0 when the terms have no `in`. */
+  pay: number | bigint;
   /** The spender's own id for this pull. Emitted, not stored. */
   reference: OptionOrNullable<ReadonlyUint8Array>;
 };
@@ -155,6 +159,7 @@ export function getPullInstructionDataEncoder(): Encoder<PullInstructionDataArgs
     getStructEncoder([
       ["discriminator", getU8Encoder()],
       ["amount", getU64Encoder()],
+      ["pay", getU64Encoder()],
       [
         "reference",
         getOptionEncoder(fixEncoderSize(getBytesEncoder(), 32), {
@@ -170,6 +175,7 @@ export function getPullInstructionDataDecoder(): Decoder<PullInstructionData> {
   return getStructDecoder([
     ["discriminator", getU8Decoder()],
     ["amount", getU64Decoder()],
+    ["pay", getU64Decoder()],
     [
       "reference",
       getOptionDecoder(fixDecoderSize(getBytesDecoder(), 32), { prefix: null }),
@@ -222,6 +228,7 @@ export type PullInput<
   payTo?: TAccountPayTo;
   payProgram?: TAccountPayProgram;
   amount: PullInstructionDataArgs["amount"];
+  pay: PullInstructionDataArgs["pay"];
   reference: PullInstructionDataArgs["reference"];
 };
 
