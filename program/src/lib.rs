@@ -13,21 +13,17 @@ program_entrypoint!(process_instruction);
 no_allocator!();
 default_panic_handler!();
 
-pub mod cancel;
 pub mod close;
 pub mod create;
 pub mod events;
-pub mod fill;
 pub mod helpers;
 pub mod invalidate;
 pub mod open;
 pub mod pull;
 pub mod state;
 
-pub use cancel::Cancel;
 pub use close::Close;
 pub use create::Create;
-pub use fill::Fill;
 pub use invalidate::Invalidate;
 pub use open::Open;
 pub use pull::Pull;
@@ -46,13 +42,7 @@ fn process_instruction(
 
         // The profile: opened once, and what ends everything at once
         Some((Open::DISCRIMINATOR, _)) => Open::try_from(accounts)?.process(),
-        Some((Invalidate::DISCRIMINATOR, data)) => {
-            Invalidate::try_from((data, accounts))?.process()
-        }
-
-        // Authorizations: one signed action - Discriminators from 10
-        Some((Fill::DISCRIMINATOR, data)) => Fill::try_from((data, accounts))?.process(),
-        Some((Cancel::DISCRIMINATOR, data)) => Cancel::try_from((data, accounts))?.process(),
+        Some((Invalidate::DISCRIMINATOR, _)) => Invalidate::try_from(accounts)?.process(),
 
         // Self-CPI EmitEvent - Discriminator 255
         Some((&constants::EVENT_DISCRIMINATOR, _)) => events::emit_event(accounts),

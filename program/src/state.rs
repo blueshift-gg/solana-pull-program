@@ -2,9 +2,8 @@
 //! lives here; handlers only see checked views. The program never holds a
 //! checked borrow, so callers must not alias a view.
 
-use crate::helpers::{check_pda, create_pda};
 use pinocchio::{account_info::AccountInfo, program_error::ProgramError};
-pub use pull_core::state::{Mandate, Nonces, Profile};
+pub use pull_core::state::{Mandate, Profile};
 use pull_core::{constants::*, errors::PullError};
 
 /// The account's bytes, after checking its owner, length and tag.
@@ -36,13 +35,6 @@ pub fn mandate(account: &AccountInfo) -> Result<(&mut Mandate, &[u8]), ProgramEr
     Ok((header, terms))
 }
 
-/// An existing page of nonces.
-#[allow(clippy::mut_from_ref)]
-pub fn nonces(account: &AccountInfo) -> Result<&mut Nonces, ProgramError> {
-    // SAFETY: length checked by `bytes`; all fields have alignment 1.
-    Ok(unsafe { Nonces::from_bytes_unchecked_mut(bytes(account, NONCES_LEN, NONCES_TAG)?) })
-}
-
 /// The profile of `authority`. Only `Open` creates one, at its PDA, and it
 /// records whose it is.
 #[allow(clippy::mut_from_ref)]
@@ -57,38 +49,4 @@ pub fn profile<'a>(
         return Err(PullError::InvalidProfile.into());
     }
     Ok(profile)
-}
-
-/// The page that holds the nonce of an authorization of `authority` with this salt,
-/// under nonce index `index`, created with rent from `payer` if the authorization
-/// is its first.
-#[allow(clippy::mut_from_ref)]
-pub fn nonces_for<'a>(
-    payer: &AccountInfo,
-    account: &'a AccountInfo,
-    authority: &[u8; 32],
-    index: u64,
-    salt: u64,
-) -> Result<&'a mut Nonces, ProgramError> {
-    let number = salt / NONCE_BITS as u64;
-    if account.is_owned_by(&crate::ID) {
-        // The page recorded its place when it was created at its PDA
-        let page = nonces(account)?;
-        if page.authority.ne(authority) || page.index() != index || page.page() != number {
-            return Err(PullError::InvalidSeeds.into());
-        }
-        return Ok(page);
-    }
-    let (index_bytes, number_bytes) = (index.to_le_bytes(), number.to_le_bytes());
-    let seeds: [&[u8]; 4] = [NONCES_SEED, authority, &index_bytes, &number_bytes];
-    let bump = check_pda(account, &seeds)?;
-    create_pda(payer, account, NONCES_LEN, &seeds, bump)?;
-    // SAFETY: the account was just created with `NONCES_LEN` zeroed bytes.
-    let page = unsafe { Nonces::from_bytes_unchecked_mut(account.borrow_mut_data_unchecked()) };
-    page.set_tag(NONCES_TAG);
-    page.authority = *authority;
-    page.set_index(index);
-    page.set_page(number);
-    page.payer = *payer.key();
-    Ok(page)
 }

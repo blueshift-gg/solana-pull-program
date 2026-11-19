@@ -2,18 +2,13 @@
 name = "pull-core"
 version = "0.0.1"
 edition = "2021"
-description = "Pull program terms, canonical encoding and text, account layouts and errors"
+description = "Pull program terms, canonical encoding, account layouts and errors"
 license = "MIT"
 
 [features]
-# The cluster a build accepts signatures for. Default: mainnet.
-devnet = []
-testnet = []
-localnet = []
 # `Sink` for `Vec<u8>`, for clients.
 std = []
 
 [dependencies]
-five8 = "1.0.0"
 five8_const = "1.0.0"
 pinocchio = { workspace = true }

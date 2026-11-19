@@ -22,16 +22,8 @@ pub enum PullError {
     MalformedTerms,
     /// The terms break a validity rule (`Terms::validate`)
     InvalidTerms,
-    /// The terms are for another cluster
-    WrongCluster,
     /// The signer is not the terms' authority
     InvalidAuthority,
-    /// The signature does not cover the rendered terms
-    InvalidSignature,
-    /// The authorization's nonce was used: it ran already, or was cancelled
-    NonceUsed,
-    /// A timestamp outside years 1970–9999 cannot be rendered
-    Unrenderable,
 
     /// The terms' window has not opened
     NotYetValid,
@@ -39,8 +31,7 @@ pub enum PullError {
     Expired,
     /// The signer is not the terms' spender
     InvalidSpender,
-    /// A mandate in force, or a page of nonces whose index is the profile's:
-    /// `Close` takes only what can never be used again
+    /// A mandate in force: `Close` takes only what can never be used again
     NotClosable,
     /// The account is not the one that paid the rent being refunded
     InvalidPayer,
@@ -72,15 +63,12 @@ pub enum PullError {
     Stale,
     /// The tokens would not go to the account the terms name
     InvalidDestination,
-    /// An authorization anyone may fill for nothing in return runs for its whole
-    /// amount, or a stranger could use it up for less
-    InexactAmount,
 }
 
 impl PullError {
     /// Every error in code order, so clients can name a code: `ALL[code]`.
     /// A new variant goes here too; the test below checks the order.
-    pub const ALL: [PullError; 32] = [
+    pub const ALL: [PullError; 27] = [
         PullError::NotSigner,
         PullError::NotMutable,
         PullError::InvalidAccountOwner,
@@ -90,11 +78,7 @@ impl PullError {
         PullError::AlreadyInitialized,
         PullError::MalformedTerms,
         PullError::InvalidTerms,
-        PullError::WrongCluster,
         PullError::InvalidAuthority,
-        PullError::InvalidSignature,
-        PullError::NonceUsed,
-        PullError::Unrenderable,
         PullError::NotYetValid,
         PullError::Expired,
         PullError::InvalidSpender,
@@ -112,7 +96,6 @@ impl PullError {
         PullError::InvalidProfile,
         PullError::Stale,
         PullError::InvalidDestination,
-        PullError::InexactAmount,
     ];
 }
 

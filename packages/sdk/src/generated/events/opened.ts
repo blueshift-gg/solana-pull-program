@@ -18,8 +18,6 @@ import {
   getHiddenPrefixEncoder,
   getStructDecoder,
   getStructEncoder,
-  getU64Decoder,
-  getU64Encoder,
   type Address,
   type FixedSizeCodec,
   type FixedSizeDecoder,
@@ -35,20 +33,14 @@ export function getOpenedEventDiscriminatorBytes(): ReadonlyUint8Array {
   return getBytesEncoder().encode(OPENED_EVENT_DISCRIMINATOR);
 }
 
-export type OpenedEvent = { authority: Address; nonceIndex: bigint };
+export type OpenedEvent = { authority: Address };
 
-export type OpenedEventArgs = {
-  authority: Address;
-  nonceIndex: number | bigint;
-};
+export type OpenedEventArgs = OpenedEvent;
 
 /** Gets the encoder for {@link OpenedEventArgs} event data. */
 export function getOpenedEventEncoder(): FixedSizeEncoder<OpenedEventArgs> {
   return getHiddenPrefixEncoder(
-    getStructEncoder([
-      ["authority", getAddressEncoder()],
-      ["nonceIndex", getU64Encoder()],
-    ]),
+    getStructEncoder([["authority", getAddressEncoder()]]),
     [getConstantEncoder(OPENED_EVENT_DISCRIMINATOR)],
   );
 }
@@ -56,10 +48,7 @@ export function getOpenedEventEncoder(): FixedSizeEncoder<OpenedEventArgs> {
 /** Gets the decoder for {@link OpenedEvent} event data. */
 export function getOpenedEventDecoder(): FixedSizeDecoder<OpenedEvent> {
   return getHiddenPrefixDecoder(
-    getStructDecoder([
-      ["authority", getAddressDecoder()],
-      ["nonceIndex", getU64Decoder()],
-    ]),
+    getStructDecoder([["authority", getAddressDecoder()]]),
     [getConstantDecoder(OPENED_EVENT_DISCRIMINATOR)],
   );
 }

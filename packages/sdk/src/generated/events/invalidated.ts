@@ -34,16 +34,11 @@ export function getInvalidatedEventDiscriminatorBytes(): ReadonlyUint8Array {
   return getBytesEncoder().encode(INVALIDATED_EVENT_DISCRIMINATOR);
 }
 
-export type InvalidatedEvent = {
-  authority: Address;
-  stale: bigint;
-  nonceIndex: bigint;
-};
+export type InvalidatedEvent = { authority: Address; stale: bigint };
 
 export type InvalidatedEventArgs = {
   authority: Address;
   stale: number | bigint;
-  nonceIndex: number | bigint;
 };
 
 /** Gets the encoder for {@link InvalidatedEventArgs} event data. */
@@ -52,7 +47,6 @@ export function getInvalidatedEventEncoder(): FixedSizeEncoder<InvalidatedEventA
     getStructEncoder([
       ["authority", getAddressEncoder()],
       ["stale", getU64Encoder()],
-      ["nonceIndex", getU64Encoder()],
     ]),
     [getConstantEncoder(INVALIDATED_EVENT_DISCRIMINATOR)],
   );
@@ -64,7 +58,6 @@ export function getInvalidatedEventDecoder(): FixedSizeDecoder<InvalidatedEvent>
     getStructDecoder([
       ["authority", getAddressDecoder()],
       ["stale", getU64Decoder()],
-      ["nonceIndex", getU64Decoder()],
     ]),
     [getConstantDecoder(INVALIDATED_EVENT_DISCRIMINATOR)],
   );

@@ -1,6 +1,6 @@
 // `npm run e2e`: every journey, through this client, on a Surfpool fork of
 // mainnet. Build the program first:
-// `cargo build-sbf --manifest-path program/Cargo.toml --features localnet`.
+// `cargo build-sbf --manifest-path program/Cargo.toml`.
 import { fork } from './fork.ts';
 import { order } from './order.ts';
 import { payout } from './payout.ts';

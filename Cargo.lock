@@ -513,19 +513,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "brine-ed25519"
-version = "0.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb50edc4cf7a2eb8bdd300e2c370724c1fb8772666734f6ef79c2873152e52c6"
-dependencies = [
- "curve25519-dalek",
- "sha2 0.10.9",
- "solana-address 2.6.1",
- "solana-define-syscall 5.2.0",
- "solana-program-error",
-]
-
-[[package]]
 name = "bs58"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1851,7 +1838,6 @@ dependencies = [
 name = "pull-core"
 version = "0.0.1"
 dependencies = [
- "five8",
  "five8_const 1.0.0",
  "pinocchio",
 ]
@@ -1860,7 +1846,6 @@ dependencies = [
 name = "pull-program"
 version = "0.0.1"
 dependencies = [
- "brine-ed25519",
  "pinocchio",
  "pinocchio-system",
  "pull-core",
@@ -1870,7 +1855,6 @@ dependencies = [
 name = "pull-tests"
 version = "0.0.1"
 dependencies = [
- "ed25519-dalek",
  "litesvm",
  "litesvm-token",
  "pull-core",

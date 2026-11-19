@@ -7,7 +7,6 @@ import {
     address,
     type Base58EncodedBytes,
     getAddressDecoder,
-    getAddressEncoder,
     getBase58Encoder,
     getBase64Encoder,
     getU64Encoder,
@@ -22,26 +21,19 @@ import {
 import {
     decodeMandate,
     ENGINE_ADDRESS,
-    Envelope,
     fetchAllMaybeMandate,
-    fetchMaybeNonces,
     fetchMaybeMandate,
     fetchMaybeProfile,
-    findNoncesPda,
     findMandatePda,
     findProfilePda,
-    getCancelInstructionAsync,
     getCloseInstruction,
     getCreateInstructionAsync,
-    getFillInstruction,
     getOpenInstructionAsync,
     getPullInstruction,
     getTermsCodec,
     identifySolanaPullEvent,
-    parseCancelledEvent,
     parseClosedEvent,
     parseCreatedEvent,
-    parseFilledEvent,
     parseInvalidatedEvent,
     parseOpenedEvent,
     parsePulledEvent,
@@ -51,19 +43,33 @@ import {
     type Terms,
     type TermsArgs,
 } from './generated/index.ts';
-import { authorizationMessage, renderAuthorization } from './text.ts';
 
 type Client = Rpc<SolanaRpcApi>;
 const TOKEN_PROGRAM = address('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
 const CLOCK = address('SysvarC1ock11111111111111111111111111111111');
-/** Nonces in one page. */
-export const NONCE_BITS = 1024n;
+/** 9999-12-31T23:59:59Z: the latest timestamp terms may hold. */
+const MAX_TIME = 253_402_300_799n;
 
 const some = <T>(o: Option<T>): T | null => (o.__option === 'Some' ? o.value : null);
 const view = (data: ReadonlyUint8Array) => new DataView(data.buffer, data.byteOffset, data.byteLength);
 const pda = async (found: Promise<readonly [Address, number]>) => (await found)[0];
 /** Terms as an integration writes them, in the shape the accounts hold. */
 export const terms = (args: TermsArgs): Terms => getTermsCodec().decode(getTermsCodec().encode(args));
+
+/**
+ * Whether the program accepts these terms, by the same rules as `pull-core`
+ * (`npm test` checks both agree). Something must be bound: who takes, where
+ * it goes, or what the authority receives.
+ */
+export function isValid(t: Terms): boolean {
+    const time = (at: bigint) => at >= 0n && at <= MAX_TIME;
+    const [notAfter, receive] = [some(t.notAfter), some(t.receive)];
+    const window = time(t.notBefore) && (notAfter === null || (notAfter > t.notBefore && time(notAfter)));
+    const { per } = t.limit;
+    const limit = t.limit.max > 0n && !(per.__kind === 'Every' && per.seconds === 0);
+    const bound = some(t.spender) !== null || some(t.limit.to) !== null || receive !== null;
+    return t.version === 1 && window && limit && (!receive || receive.min > 0n) && bound;
+}
 
 /**
  * What a token account allows the program: its balance, and whether the
@@ -77,10 +83,11 @@ function seat(data: ReadonlyUint8Array) {
     return { allowance: enabled ? view(data).getBigUint64(121, true) : 0n, balance: view(data).getBigUint64(64, true), enabled };
 }
 
-const accounts = async (rpc: Client, addresses: Address[]) => {
+const fetchAccounts = async (rpc: Client, addresses: Address[]) => {
     const { value } = await rpc.getMultipleAccounts(addresses, { encoding: 'base64' }).send();
-    return value.map((account) => (account ? new Uint8Array(getBase64Encoder().encode(account.data[0])) : null));
+    return value.map((account) => (account ? { data: new Uint8Array(getBase64Encoder().encode(account.data[0])), owner: account.owner } : null));
 };
+const accounts = async (rpc: Client, addresses: Address[]) => (await fetchAccounts(rpc, addresses)).map((a) => a?.data ?? null);
 
 export async function fetchSeat(rpc: Client, account: Address) {
     const [data] = await accounts(rpc, [account]);
@@ -89,8 +96,8 @@ export async function fetchSeat(rpc: Client, account: Address) {
 
 /**
  * Enable a token account: SPL `Approve` the engine as its delegate. `amount`
- * caps what every mandate and authorization on the account can take in total; leave
- * it out for no cap beyond their own limits.
+ * caps what every mandate on the account can take in total; leave it out for
+ * no cap beyond their own limits.
  */
 export const enableInstruction = (p: { owner: TransactionSigner; account: Address; amount?: bigint; tokenProgram?: Address }): Instruction => ({
     accounts: [
@@ -108,179 +115,62 @@ export const enableInstruction = (p: { owner: TransactionSigner; account: Addres
  * there is none, and create the mandate under the next number. Returns where
  * the mandate will be.
  */
-export async function onboardInstructions(rpc: Client, p: { authority: TransactionSigner; payer: TransactionSigner; terms: TermsArgs; tokenProgram?: Address }) {
+export async function onboardInstructions(rpc: Client, p: { authority: TransactionSigner; payer: TransactionSigner; terms: TermsArgs }) {
     const profileAddress = await pda(findProfilePda({ authority: p.authority.address }));
-    const [[from], profile] = await Promise.all([accounts(rpc, [p.terms.limit.from]), fetchMaybeProfile(rpc, profileAddress)]);
+    const [[from], profile] = await Promise.all([fetchAccounts(rpc, [p.terms.limit.from]), fetchMaybeProfile(rpc, profileAddress)]);
     if (!from) throw new Error(`token account ${p.terms.limit.from} does not exist`);
     const index = (profile.exists ? profile.data.mandates : 0n) + 1n;
     const mandate = await pda(findMandatePda({ authority: p.authority.address, index }));
     const instructions: Instruction[] = [
-        ...(seat(from).enabled ? [] : [enableInstruction({ account: p.terms.limit.from, owner: p.authority, tokenProgram: p.tokenProgram })]),
+        ...(seat(from.data).enabled ? [] : [enableInstruction({ account: p.terms.limit.from, owner: p.authority, tokenProgram: from.owner })]),
         ...(profile.exists ? [] : [await getOpenInstructionAsync({ authority: p.authority, payer: p.payer })]),
         await getCreateInstructionAsync({ authority: p.authority, payer: p.payer, mandate, terms: p.terms }),
     ];
     return { index, instructions, mandate };
 }
 
-/** The accounts a pull moves tokens between, taken from the terms. */
-async function legs(t: Terms, p: { to?: Address; payFrom?: Address; tokenProgram?: Address; payProgram?: Address }) {
-    const [to, receive] = [some(t.limit.to) ?? p.to, some(t.receive)];
-    if (!to) throw new Error('the terms do not name where the tokens go: pass `to`');
-    if (receive && !p.payFrom) throw new Error('the authority must receive something: pass `payFrom`');
-    return {
-        from: t.limit.from,
-        mint: t.limit.mint,
-        profile: await pda(findProfilePda({ authority: t.authority })),
-        to,
-        tokenProgram: p.tokenProgram,
-        ...(receive ? { payFrom: p.payFrom, payMint: receive.mint, payProgram: p.payProgram ?? TOKEN_PROGRAM, payTo: receive.to } : {}),
-    };
-}
-
-type Legs = { to?: Address; payFrom?: Address; tokenProgram?: Address; payProgram?: Address };
-
 /**
  * Take `amount` under a mandate (`fetchMandateStatus` or `fetchMandates` give
  * it). `to` is where the tokens go unless the terms name it; `payFrom` is the
  * spender's account that pays what the authority must receive; `reference`
  * is the spender's own 32-byte id for this pull, which the event carries.
+ * The mints and token programs are read from the token accounts the terms name.
  */
-export const pullInstruction = async (p: Legs & { spender: TransactionSigner; mandate: Account<Mandate>; amount: bigint; reference?: Uint8Array }) =>
-    getPullInstruction({ ...(await legs(p.mandate.data.terms, p)), amount: p.amount, mandate: p.mandate.address, reference: p.reference ?? null, spender: p.spender });
-
-/** A signed authorization, as it travels from the owner's wallet to whoever fills it. */
-export type Authorization = {
-    terms: Terms;
-    /** The owner's nonce index when it signed. The authorization works only while it is the profile's. */
-    nonceIndex: bigint;
-    /** What the owner's wallet put before the text in the bytes it signed. */
-    envelope: Envelope;
-    signature: ReadonlyUint8Array;
-};
-
-/** An authorization as bytes, to hand to whoever fills it: envelope, nonce index, signature, terms. */
-export function encodeAuthorization(a: Authorization): Uint8Array {
-    return Uint8Array.from([a.envelope, ...getU64Encoder().encode(a.nonceIndex), ...a.signature, ...getTermsCodec().encode(a.terms)]);
-}
-
-export function decodeAuthorization(bytes: ReadonlyUint8Array): Authorization {
-    if (bytes.length < 73 || bytes[0] > 1) throw new Error('not an authorization');
-    return { envelope: bytes[0] as Envelope, nonceIndex: view(bytes).getBigUint64(1, true), signature: bytes.slice(9, 73), terms: getTermsCodec().decode(bytes.subarray(73)) };
-}
-
-/** The decimals of each mint the terms name, read from the mints themselves: what the text shows amounts with. */
-export async function fetchDecimals(rpc: Client, t: Terms): Promise<Record<string, number>> {
-    const mints = [t.limit.mint, ...(some(t.receive) ? [some(t.receive)!.mint] : [])];
-    const found = await accounts(rpc, mints);
-    return Object.fromEntries(
-        mints.map((mint, i) => {
-            if (!found[i]) throw new Error(`mint ${mint} does not exist`);
-            // Mint: mint_authority: COption<Pubkey>, supply: u64, decimals at 44
-            return [mint, found[i]![44]];
-        }),
-    );
-}
-
-/** Whether the signature is the authority's over exactly this authorization, as the program will check it. */
-export async function verifyAuthorization(a: Authorization, decimals: Record<string, number>): Promise<boolean> {
-    const key = await crypto.subtle.importKey('raw', getAddressEncoder().encode(a.terms.authority) as Uint8Array<ArrayBuffer>, 'Ed25519', false, ['verify']);
-    const message = authorizationMessage(a.terms, a.nonceIndex, decimals, a.envelope);
-    return crypto.subtle.verify('Ed25519', key, a.signature as Uint8Array<ArrayBuffer>, message as Uint8Array<ArrayBuffer>);
-}
-
-/** A wallet, as the Wallet Standard presents one, and the account that signs. */
-type SigningWallet = { features: Readonly<Record<string, unknown>> };
-type SigningAccount = { address: string; publicKey: ReadonlyUint8Array };
-type SignMessage = { signMessage(input: { account: SigningAccount; message: Uint8Array }): Promise<readonly { signedMessage: ReadonlyUint8Array; signature: ReadonlyUint8Array }[]> };
-type SignOffchainMessage = {
-    supportedMessageVersions: readonly number[];
-    signOffchainMessage(input: { messageVersion: 1; account: SigningAccount; message: string; requiredSigners: readonly ReadonlyUint8Array[] }): Promise<readonly { signedOffchainMessage: ReadonlyUint8Array; signature: ReadonlyUint8Array }[]>;
-};
-
-const same = (a: ReadonlyUint8Array, b: ReadonlyUint8Array) => a.length === b.length && a.every((byte, i) => byte === b[i]);
-
-/**
- * Ask the owner's wallet to sign an authorization, in whichever way the
- * wallet can: as an Offchain Message if it has `solana:signOffchainMessage`,
- * as plain text through `solana:signMessage` otherwise. Leave `salt` out to
- * take the next free one. The result is checked before it is returned: the
- * wallet signed exactly the text, and the signature is the one the program
- * will accept. The owner must have a profile (`onboardInstructions`, or
- * `getOpenInstructionAsync`) and the token account must be enabled.
- */
-export async function requestAuthorization(rpc: Client, p: { wallet: SigningWallet; account: SigningAccount; terms: Omit<TermsArgs, 'salt'> & { salt?: bigint }; skip?: bigint[] }): Promise<Authorization> {
-    const authority = p.terms.authority;
-    if (authority !== p.account.address) throw new Error('the terms name another account as their authority');
-    const profile = await fetchMaybeProfile(rpc, await pda(findProfilePda({ authority })));
-    if (!profile.exists) throw new Error('this account has no profile yet: open one first');
-    const { nonceIndex } = profile.data;
-    const t = terms({ ...p.terms, salt: p.terms.salt ?? (await nextSalt(rpc, authority, nonceIndex, p.skip)) });
-    const decimals = await fetchDecimals(rpc, t);
-    const text = renderAuthorization(t, nonceIndex, decimals);
-
-    const offchain = p.wallet.features['solana:signOffchainMessage'] as SignOffchainMessage | undefined;
-    const plain = p.wallet.features['solana:signMessage'] as SignMessage | undefined;
-    const envelope = offchain?.supportedMessageVersions.includes(1) ? Envelope.OffchainMessage : Envelope.Text;
-    const expected = authorizationMessage(t, nonceIndex, decimals, envelope);
-    let signed: { bytes: ReadonlyUint8Array; signature: ReadonlyUint8Array };
-    if (envelope === Envelope.OffchainMessage) {
-        const [out] = await offchain!.signOffchainMessage({ account: p.account, message: text, messageVersion: 1, requiredSigners: [p.account.publicKey] });
-        signed = { bytes: out.signedOffchainMessage, signature: out.signature };
-    } else {
-        if (!plain) throw new Error('this wallet cannot sign messages');
-        const [out] = await plain.signMessage({ account: p.account, message: expected });
-        signed = { bytes: out.signedMessage, signature: out.signature };
-    }
-    // A wallet may wrap a message before it signs, as some do for a hardware key; the program would refuse that
-    if (!same(signed.bytes, expected)) throw new Error('this wallet did not sign the text as it was given, so the program cannot verify it');
-    const authorization = { envelope, nonceIndex, signature: signed.signature, terms: t };
-    if (!(await verifyAuthorization(authorization, decimals))) throw new Error("the wallet's signature does not verify");
-    return authorization;
-}
-
-/**
- * Run a signed authorization, once. `payer` funds the page of nonces if this
- * authorization is the first in it, and gets it back when the page closes.
- */
-export const fillInstruction = async (p: Legs & { spender: TransactionSigner; payer: TransactionSigner; authorization: Authorization; amount: bigint }) => {
-    const { terms: t, nonceIndex, envelope, signature } = p.authorization;
-    return getFillInstruction({
-        ...(await legs(t, p)),
+export async function pullInstruction(rpc: Client, p: { spender: TransactionSigner; mandate: Account<Mandate>; amount: bigint; to?: Address; payFrom?: Address; reference?: Uint8Array }) {
+    const t = p.mandate.data.terms;
+    const [to, receive] = [some(t.limit.to) ?? p.to, some(t.receive)];
+    if (!to) throw new Error('the terms do not name where the tokens go: pass `to`');
+    if (receive && !p.payFrom) throw new Error('the authority must receive something: pass `payFrom`');
+    const [from, payTo] = await fetchAccounts(rpc, [t.limit.from, ...(receive ? [receive.to] : [])]);
+    if (!from || (receive && !payTo)) throw new Error('a token account the terms name does not exist');
+    // Token account: mint at 0
+    const mint = (a: { data: Uint8Array }) => getAddressDecoder().decode(a.data.subarray(0, 32));
+    return getPullInstruction({
         amount: p.amount,
-        envelope,
-        nonces: await pda(findNoncesPda({ authority: t.authority, nonceIndex, page: t.salt / NONCE_BITS })),
-        payer: p.payer,
-        signature,
+        from: t.limit.from,
+        mandate: p.mandate.address,
+        mint: mint(from),
+        profile: await pda(findProfilePda({ authority: t.authority })),
+        reference: p.reference ?? null,
         spender: p.spender,
-        terms: t,
+        to,
+        tokenProgram: from.owner,
+        ...(receive ? { payFrom: p.payFrom, payMint: mint(payTo!), payProgram: payTo!.owner, payTo: receive.to } : {}),
     });
-};
-
-/** The authority ends one mandate. It closes at once, and its rent goes back to whoever paid it. */
-export const cancelMandateInstruction = (p: { authority: TransactionSigner; mandate: Account<Mandate> }) =>
-    getCancelInstructionAsync({ account: p.mandate.address, authority: p.authority, payer: p.mandate.data.payer, salt: null });
-
-/** The authority uses up the nonce of one authorization it signed under `nonceIndex`, so it can never be filled. */
-export const cancelAuthorizationInstruction = async (p: { authority: TransactionSigner; payer: TransactionSigner; nonceIndex: bigint; salt: bigint }) =>
-    getCancelInstructionAsync({
-        account: await pda(findNoncesPda({ authority: p.authority.address, nonceIndex: p.nonceIndex, page: p.salt / NONCE_BITS })),
-        authority: p.authority,
-        payer: p.payer,
-        salt: p.salt,
-    });
+}
 
 /**
- * Anyone closes a mandate that can never be used again (expired, or
- * invalidated by its authority), and its rent goes back to whoever paid it.
+ * End a mandate and return its rent to whoever paid it: its authority at any
+ * time, anyone once it expired or was invalidated.
  */
 export const closeMandateInstruction = async (p: { closer: TransactionSigner; mandate: Account<Mandate> }) =>
-    getCloseInstruction({ account: p.mandate.address, closer: p.closer, payer: p.mandate.data.payer, profile: await pda(findProfilePda({ authority: p.mandate.data.terms.authority })) });
+    getCloseInstruction({ closer: p.closer, mandate: p.mandate.address, payer: p.mandate.data.payer, profile: await pda(findProfilePda({ authority: p.mandate.data.terms.authority })) });
 
 /** The state of a mandate, as a spender needs it before it pulls. */
 export type MandateState =
     /** In force. `available` is what one pull can take now. */
     | 'active'
-    /** Not on chain: never created, cancelled, or closed. */
+    /** Not on chain: never created, or closed. */
     | 'missing'
     /** Its authority ended every mandate up to this one. */
     | 'invalidated'
@@ -331,92 +221,20 @@ export async function fetchMandates(rpc: Client, by: { authority: Address } | { 
         }
         return found;
     }
-    // Mandate: a 59-byte header, then the terms: version, cluster, authority, spender: option tag at 93, key at 94
-    const filters = [{ memcmp: { bytes: by.spender as string as Base58EncodedBytes, encoding: 'base58' as const, offset: 94n } }];
+    // Mandate: a 59-byte header, then the terms: version, authority, spender: option tag at 92, key at 93
+    const filters = [{ memcmp: { bytes: by.spender as string as Base58EncodedBytes, encoding: 'base58' as const, offset: 93n } }];
     const all = await rpc.getProgramAccounts(SOLANA_PULL_PROGRAM_ADDRESS, { encoding: 'base64', filters }).send();
     return all.flatMap(({ account, pubkey }) => {
         const data = new Uint8Array(getBase64Encoder().encode(account.data[0]));
         // tag 1 is a mandate; a spender's key follows only a set option tag
-        if (data[0] !== 1 || data[93] !== 1) return [];
+        if (data[0] !== 1 || data[92] !== 1) return [];
         return [decodeMandate({ address: pubkey, data, executable: false, lamports: account.lamports, programAddress: SOLANA_PULL_PROGRAM_ADDRESS, space: BigInt(data.length) })];
     });
 }
 
-const used = (bits: ReadonlyUint8Array | null, salt: bigint) => {
-    const bit = Number(salt % NONCE_BITS);
-    return !!bits && (bits[bit >> 3] & (1 << (bit & 7))) !== 0;
-};
-
-const noncePage = async (rpc: Client, authority: Address, nonceIndex: bigint, page: bigint) => {
-    const found = await fetchMaybeNonces(rpc, await pda(findNoncesPda({ authority, nonceIndex, page })));
-    return found.exists ? found.data.bits : null;
-};
-
-/** The state of a signed authorization, as whoever would fill it needs it. */
-export type AuthorizationState =
-    /** It can run now. `available` is the most one fill can take. */
-    | 'fillable'
-    /** The signature is not the authority's over these terms. */
-    | 'invalidSignature'
-    /** The authority ended every authorization it had signed, or has no profile. */
-    | 'invalidated'
-    /** It ran already, or the authority cancelled it. */
-    | 'used'
-    | 'notStarted'
-    | 'expired'
-    /** The engine is not the delegate of the token account. */
-    | 'notDelegate';
-
-/**
- * Whether an authorization can be filled now, and for how much, before
- * anyone pays for a transaction: the signature, the authority's profile, the
- * nonce, the window and the token account, in the order the program checks.
- */
-export async function fetchAuthorizationStatus(rpc: Client, a: Authorization) {
-    const t = a.terms;
-    const [profile, page] = await Promise.all([pda(findProfilePda({ authority: t.authority })), pda(findNoncesPda({ authority: t.authority, nonceIndex: a.nonceIndex, page: t.salt / NONCE_BITS }))]);
-    const [[profileData, pageData, from, clock], decimals] = await Promise.all([accounts(rpc, [profile, page, t.limit.from, CLOCK]), fetchDecimals(rpc, t)]);
-    // Profile: nonce_index at 49. Nonces: bits at 81. Clock: unix_timestamp at 32
-    const now = view(clock!).getBigInt64(32, true);
-    const held = from ? seat(from) : { allowance: 0n, balance: 0n, enabled: false };
-    const notAfter = some(t.notAfter);
-    const state: AuthorizationState = !(await verifyAuthorization(a, decimals))
-        ? 'invalidSignature'
-        : !profileData || view(profileData).getBigUint64(49, true) !== a.nonceIndex
-          ? 'invalidated'
-          : used(pageData?.subarray(81) ?? null, t.salt)
-            ? 'used'
-            : now < t.notBefore
-              ? 'notStarted'
-              : notAfter !== null && now >= notAfter
-                ? 'expired'
-                : !held.enabled
-                  ? 'notDelegate'
-                  : 'fillable';
-    const least = [t.limit.max, held.allowance, held.balance].reduce((x, y) => (x < y ? x : y));
-    return { allowance: held.allowance, available: state === 'fillable' ? least : 0n, balance: held.balance, state };
-}
-
-/**
- * The lowest salt whose nonce is free for a new authorization of `authority` under
- * `nonceIndex`. Salts handed out in sequence share pages, so one page serves
- * 1,024 authorizations. `skip` are salts already given to authorizations that are signed
- * but not yet on chain.
- */
-export async function nextSalt(rpc: Client, authority: Address, nonceIndex: bigint, skip: bigint[] = []): Promise<bigint> {
-    for (let page = 0n; ; page++) {
-        const bits = await noncePage(rpc, authority, nonceIndex, page);
-        for (let salt = page * NONCE_BITS; salt < (page + 1n) * NONCE_BITS; salt++) {
-            if (!used(bits, salt) && !skip.includes(salt)) return salt;
-        }
-    }
-}
-
 const EVENTS = {
-    [SolanaPullEvent.Cancelled]: ['cancelled', parseCancelledEvent],
     [SolanaPullEvent.Closed]: ['closed', parseClosedEvent],
     [SolanaPullEvent.Created]: ['created', parseCreatedEvent],
-    [SolanaPullEvent.Filled]: ['filled', parseFilledEvent],
     [SolanaPullEvent.Invalidated]: ['invalidated', parseInvalidatedEvent],
     [SolanaPullEvent.Opened]: ['opened', parseOpenedEvent],
     [SolanaPullEvent.Pulled]: ['pulled', parsePulledEvent],

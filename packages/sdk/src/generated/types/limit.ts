@@ -30,10 +30,9 @@ import {
   type PerArgs,
 } from "./index.ts";
 
-/** What may go out: at most `max` of `mint` may leave `from`, a token account of the authority. */
+/** What may go out: at most `max` may leave `from`, a token account of the authority, in its mint. */
 export type Limit = {
   from: Address;
-  mint: Address;
   max: bigint;
   per: Per;
   /** The only token account the tokens may go to. None leaves it to the spender. */
@@ -42,7 +41,6 @@ export type Limit = {
 
 export type LimitArgs = {
   from: Address;
-  mint: Address;
   max: number | bigint;
   per: PerArgs;
   /** The only token account the tokens may go to. None leaves it to the spender. */
@@ -52,7 +50,6 @@ export type LimitArgs = {
 export function getLimitEncoder(): Encoder<LimitArgs> {
   return getStructEncoder([
     ["from", getAddressEncoder()],
-    ["mint", getAddressEncoder()],
     ["max", getU64Encoder()],
     ["per", getPerEncoder()],
     ["to", getOptionEncoder(getAddressEncoder())],
@@ -62,7 +59,6 @@ export function getLimitEncoder(): Encoder<LimitArgs> {
 export function getLimitDecoder(): Decoder<Limit> {
   return getStructDecoder([
     ["from", getAddressDecoder()],
-    ["mint", getAddressDecoder()],
     ["max", getU64Decoder()],
     ["per", getPerDecoder()],
     ["to", getOptionDecoder(getAddressDecoder())],

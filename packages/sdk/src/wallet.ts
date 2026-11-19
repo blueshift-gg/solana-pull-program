@@ -1,10 +1,8 @@
-// For wallets: say what a transaction or a message does with the Pull
-// program, in rows a wallet can show before the owner signs.
+// For wallets: say what a transaction does with the Pull program, in rows a
+// wallet can show before the owner signs.
 import { type Address, type Instruction, type Option, type ReadonlyUint8Array } from '@solana/kit';
 
-import { ENGINE_ADDRESS, fetchMaybeProfile, findProfilePda, parseSolanaPullInstruction, SOLANA_PULL_PROGRAM_ADDRESS, SolanaPullInstruction, type Terms } from './generated/index.ts';
-import { fetchDecimals } from './client.ts';
-import { parseAuthorization } from './text.ts';
+import { ENGINE_ADDRESS, parseSolanaPullInstruction, SOLANA_PULL_PROGRAM_ADDRESS, SolanaPullInstruction, type Terms } from './generated/index.ts';
 
 const TOKEN_PROGRAMS: string[] = ['TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'];
 const some = <T>(o: Option<T>): T | null => (o.__option === 'Some' ? o.value : null);
@@ -13,7 +11,11 @@ const some = <T>(o: Option<T>): T | null => (o.__option === 'Some' ? o.value : n
 export type Row = [label: string, value: string];
 /** What the owner is asked to approve. `caution` is for what deserves a second look. */
 export type Approval = { title: string; rows: Row[]; caution?: string };
-/** What a wallet knows about tokens: decimals and a symbol per mint. Amounts of a mint it does not know are shown raw. */
+/**
+ * What a wallet knows about the owner's token accounts: decimals and a symbol
+ * per token account. The terms name accounts, not mints; amounts in an account
+ * the wallet does not know are shown raw.
+ */
 export type Tokens = Record<string, { decimals: number; symbol?: string }>;
 
 const short = (a: Address) => `${a.slice(0, 4)}…${a.slice(-4)}`;
@@ -26,12 +28,12 @@ function span(seconds: number): string {
     return n === 1 ? name : `${n} ${name}s`;
 }
 
-function amount(raw: bigint, mint: Address, tokens: Tokens): string {
-    const token = tokens[mint];
-    if (!token) return `${raw} base units of ${short(mint)}`;
+function amount(raw: bigint, account: Address, tokens: Tokens): string {
+    const token = tokens[account];
+    if (!token) return `${raw} base units of the token in ${short(account)}`;
     const digits = raw.toString().padStart(token.decimals + 1, '0');
     const [whole, fraction] = [digits.slice(0, digits.length - token.decimals), digits.slice(digits.length - token.decimals).replace(/0+$/, '')];
-    return `${whole}${fraction ? `.${fraction}` : ''} ${token.symbol ?? short(mint)}`;
+    return `${whole}${fraction ? `.${fraction}` : ''} ${token.symbol ?? `of the token in ${short(account)}`}`;
 }
 
 /** Terms in a wallet's words: who can take what, where it goes, what comes back, and until when. */
@@ -40,20 +42,16 @@ export function describeTerms(terms: Terms, tokens: Tokens = {}): Row[] {
     const [spender, to, receive, notAfter] = [some(terms.spender), some(limit.to), some(terms.receive), some(terms.notAfter)];
     const rows: Row[] = [
         ['Who can take it', spender ? short(spender) : 'Anyone'],
-        ['Can take', `Up to ${amount(limit.max, limit.mint, tokens)}${limit.per.__kind === 'Every' ? ` every ${span(limit.per.seconds)}` : ' in total'}`],
+        ['Can take', `Up to ${amount(limit.max, limit.from, tokens)}${limit.per.__kind === 'Every' ? ` every ${span(limit.per.seconds)}` : ' in total'}`],
         ['From', short(limit.from)],
         ['Goes to', to ? `Only ${short(to)}` : 'Wherever the taker chooses'],
     ];
-    if (receive) {
-        const decay = some(receive.decay);
-        const moving = decay ? `, moving to ${amount(decay.min, receive.mint, tokens)} between ${date(decay.t0)} and ${date(decay.t1)}` : '';
-        rows.push(['Only if you receive', `At least ${amount(receive.min, receive.mint, tokens)} each time${moving}`]);
-    }
+    if (receive) rows.push(['Only if you receive', `At least ${amount(receive.min, receive.to, tokens)} into ${short(receive.to)} each time`]);
     rows.push(['Starts', date(terms.notBefore)], ['Ends', notAfter === null ? 'Never, until you cancel it' : date(notAfter)]);
     return rows;
 }
 
-const NO_EXPIRY = 'This does not expire. It stays usable until it runs or you cancel it.';
+const NO_EXPIRY = 'This does not expire. It stays usable until you cancel it.';
 
 /**
  * What one instruction of a transaction does, if it concerns the Pull
@@ -79,66 +77,13 @@ export function describeInstruction(instruction: Instruction, tokens: Tokens = {
             const never = some(parsed.data.terms.notAfter) === null;
             return { rows: describeTerms(parsed.data.terms, tokens), title: 'Approve a standing permission', ...(never ? { caution: NO_EXPIRY } : {}) };
         }
-        case SolanaPullInstruction.Cancel:
-            return some(parsed.data.salt) === null
-                ? { rows: [['Permission', short(parsed.accounts.account.address)]], title: 'Cancel one standing permission' }
-                : { rows: [['Number', `${some(parsed.data.salt)}`]], title: 'Cancel one payment you signed' };
-        case SolanaPullInstruction.Invalidate: {
-            const what = [parsed.data.what & 1 ? 'every standing permission' : '', parsed.data.what & 2 ? 'every payment you signed' : ''].filter(Boolean);
-            return { caution: 'This cannot be undone. Subscriptions you still want must be approved again.', rows: [], title: `End ${what.join(' and ')}, all at once` };
-        }
+        case SolanaPullInstruction.Invalidate:
+            return { caution: 'This cannot be undone. Subscriptions you still want must be approved again.', rows: [], title: 'End every standing permission, all at once' };
         case SolanaPullInstruction.Close:
-            return { rows: [['Account', short(parsed.accounts.account.address)]], title: 'Close an ended permission and return its rent' };
+            return { rows: [['Permission', short(parsed.accounts.mandate.address)]], title: 'End a standing permission and return its rent' };
         case SolanaPullInstruction.Pull:
-            return { rows: [['Permission', short(parsed.accounts.mandate.address)], ['Amount', amount(parsed.data.amount, parsed.accounts.mint.address, tokens)]], title: 'Take a payment under a standing permission' };
-        case SolanaPullInstruction.Fill:
-            return { rows: [['Amount', amount(parsed.data.amount, parsed.accounts.mint.address, tokens)], ...describeTerms(parsed.data.terms, tokens)], title: 'Run a signed payment' };
+            return { rows: [['Permission', short(parsed.accounts.mandate.address)], ['Amount', amount(parsed.data.amount, parsed.accounts.from.address, tokens)]], title: 'Take a payment under a standing permission' };
         default:
             return null;
     }
-}
-
-/**
- * What a message the owner is asked to sign approves, if it is an authorization of
- * the Pull program: null for any other message, and for any text that is not
- * exactly an authorization's. `nonceIndex` is the one the text was written for; it
- * only works while it is the owner's profile's. A wallet that knows a mint's
- * decimals should refuse a text that shows other ones.
- */
-export function describeAuthorization(text: string, tokens: Tokens = {}): (Approval & { terms: Terms; nonceIndex: bigint }) | null {
-    const authorization = parseAuthorization(text);
-    if (!authorization) return null;
-    for (const [mint, decimals] of Object.entries(authorization.decimals)) {
-        if (tokens[mint] && tokens[mint].decimals !== decimals) return null;
-    }
-    const never = some(authorization.terms.notAfter) === null;
-    return { nonceIndex: authorization.nonceIndex, rows: describeTerms(authorization.terms, tokens), terms: authorization.terms, title: 'Approve one payment', ...(never ? { caution: NO_EXPIRY } : {}) };
-}
-
-/**
- * What a wallet does when it is asked to sign a message: if the message is
- * an authorization, everything it needs to show, checked against the chain.
- * `problems` are reasons not to offer the signature at all: the text is for
- * another account, it shows amounts with decimals the mint does not have, or
- * it is written for a nonce index that is not the account's, so it could
- * never run. Null if the message is not an authorization.
- */
-export async function reviewAuthorization(rpc: Parameters<typeof fetchDecimals>[0], text: string, account: Address, tokens: Tokens = {}) {
-    const parsed = parseAuthorization(text);
-    if (!parsed) return null;
-    const { terms, nonceIndex } = parsed;
-    const [decimals, [profileAddress]] = await Promise.all([fetchDecimals(rpc, terms), findProfilePda({ authority: terms.authority })]);
-    const profile = await fetchMaybeProfile(rpc, profileAddress);
-    const problems: string[] = [];
-    if (terms.authority !== account) problems.push('This is for another account.');
-    for (const [mint, shown] of Object.entries(parsed.decimals)) {
-        if (decimals[mint] !== shown) problems.push(`The amounts of ${short(mint as Address)} are shown with the wrong decimals.`);
-    }
-    if (!profile.exists) problems.push('This account has no profile with the Pull program, so this could never run.');
-    else if (profile.data.nonceIndex !== nonceIndex) problems.push('This was written for an earlier state of the account, so it could never run.');
-    // Symbols are the wallet's; decimals are the chain's
-    const known = Object.fromEntries(Object.entries(decimals).map(([mint, d]) => [mint, { decimals: d, symbol: tokens[mint]?.symbol }]));
-    const anyone = some(terms.spender) === null;
-    const caution = [some(terms.notAfter) === null ? NO_EXPIRY : '', anyone ? 'Anyone can carry this out, not one named party.' : ''].filter(Boolean).join(' ');
-    return { nonceIndex, problems, rows: describeTerms(terms, known), terms, title: 'Approve one payment', ...(caution ? { caution } : {}) };
 }

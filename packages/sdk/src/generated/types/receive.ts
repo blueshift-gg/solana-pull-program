@@ -10,59 +10,35 @@ import {
   combineCodec,
   getAddressDecoder,
   getAddressEncoder,
-  getOptionDecoder,
-  getOptionEncoder,
   getStructDecoder,
   getStructEncoder,
   getU64Decoder,
   getU64Encoder,
   type Address,
-  type Codec,
-  type Decoder,
-  type Encoder,
-  type Option,
-  type OptionOrNullable,
+  type FixedSizeCodec,
+  type FixedSizeDecoder,
+  type FixedSizeEncoder,
 } from "@solana/kit";
-import {
-  getDecayDecoder,
-  getDecayEncoder,
-  type Decay,
-  type DecayArgs,
-} from "./index.ts";
 
-/** What must come in: each use, at least `min` of `mint` arrives in `to`, a token account of the authority. */
-export type Receive = {
-  to: Address;
-  mint: Address;
-  min: bigint;
-  decay: Option<Decay>;
-};
+/** What must come in: each use, at least `min` arrives in `to`, a token account of the authority, in its mint. */
+export type Receive = { to: Address; min: bigint };
 
-export type ReceiveArgs = {
-  to: Address;
-  mint: Address;
-  min: number | bigint;
-  decay: OptionOrNullable<DecayArgs>;
-};
+export type ReceiveArgs = { to: Address; min: number | bigint };
 
-export function getReceiveEncoder(): Encoder<ReceiveArgs> {
+export function getReceiveEncoder(): FixedSizeEncoder<ReceiveArgs> {
   return getStructEncoder([
     ["to", getAddressEncoder()],
-    ["mint", getAddressEncoder()],
     ["min", getU64Encoder()],
-    ["decay", getOptionEncoder(getDecayEncoder())],
   ]);
 }
 
-export function getReceiveDecoder(): Decoder<Receive> {
+export function getReceiveDecoder(): FixedSizeDecoder<Receive> {
   return getStructDecoder([
     ["to", getAddressDecoder()],
-    ["mint", getAddressDecoder()],
     ["min", getU64Decoder()],
-    ["decay", getOptionDecoder(getDecayDecoder())],
   ]);
 }
 
-export function getReceiveCodec(): Codec<ReceiveArgs, Receive> {
+export function getReceiveCodec(): FixedSizeCodec<ReceiveArgs, Receive> {
   return combineCodec(getReceiveEncoder(), getReceiveDecoder());
 }

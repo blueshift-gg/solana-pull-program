@@ -1,15 +1,11 @@
-//! Prints random terms, one JSON object per line, as the Rust core encodes,
-//! judges and renders them. The TypeScript client must agree on every line:
-//! that is what keeps its codec, its validity rules and its text the same as
-//! the program's.
+//! Prints random terms, one JSON object per line, as the Rust core encodes
+//! and judges them. The TypeScript client must agree on every line: that is
+//! what keeps its codec and its validity rules the same as the program's.
 //!
-//! `bytes` and `text` are hex. `text` is the authorization text under `index` with
-//! the two `decimals` (of the limit's mint, of the received mint); it is
-//! absent when the terms are not valid.
+//! `bytes` is hex.
 
-use pull_core::constants::{CLUSTER, MAX_TIME};
-use pull_core::render::render;
-use pull_core::terms::{Decay, Limit, Per, Receive, Terms};
+use pull_core::constants::MAX_TIME;
+use pull_core::terms::{Limit, Per, Receive, Terms};
 
 struct Random(u64);
 
@@ -29,8 +25,8 @@ impl Random {
         core::array::from_fn(|_| self.next() as u8)
     }
 
-    /// Mostly round or small, so every branch of the text is reached, and
-    /// sometimes zero or huge, so the validity rules are too.
+    /// Mostly round or small, and sometimes zero or huge, so every validity
+    /// rule is reached.
     fn amount(&mut self) -> u64 {
         match self.below(6) {
             0 => 0,
@@ -65,54 +61,28 @@ fn main() {
             2 => Per::Every(r.next() as u32),
             _ => Per::Every([60, 3_600, 86_400, 2_592_000, 90_061][r.below(5) as usize]),
         };
-        let decay = (r.below(2) == 0).then(|| {
-            let t0 = r.time();
-            Decay {
-                t0,
-                t1: t0.saturating_add(r.below(100_000) as i64 - 10),
-                min: r.amount(),
-            }
-        });
         let receive = (r.below(2) == 0).then(|| Receive {
             to: &keys[5],
-            mint: &keys[6],
             min: r.amount(),
-            decay,
         });
         let terms = Terms {
-            cluster: CLUSTER,
             authority: &keys[0],
             spender: (r.below(2) == 0).then_some(&keys[1]),
             not_before,
             not_after: (r.below(2) == 0)
                 .then(|| not_before.saturating_add(r.below(1_000_000) as i64 - 10)),
-            salt: r.next() >> r.below(64),
             limit: Limit {
                 from: &keys[2],
-                mint: &keys[3],
                 max: r.amount(),
                 per,
                 to: (r.below(2) == 0).then_some(&keys[4]),
             },
             receive,
         };
-        let (index, decimals) = (r.next(), [r.below(13) as u8, r.below(13) as u8]);
-
         let mut bytes = Vec::new();
         terms.write(&mut bytes);
         let valid = terms.validate().is_ok();
         assert_eq!(Terms::decode(&bytes).is_ok(), valid);
-        let mut text = Vec::new();
-        let of = |mint: &[u8; 32]| Ok(decimals[(mint == &keys[6]) as usize]);
-        let text = match valid && render(&terms, index, of, &mut text).is_ok() {
-            true => format!(r#","text":"{}""#, hex(&text)),
-            false => String::new(),
-        };
-        println!(
-            r#"{{"bytes":"{}","valid":{valid},"index":"{index}","decimals":[{},{}]{text}}}"#,
-            hex(&bytes),
-            decimals[0],
-            decimals[1],
-        );
+        println!(r#"{{"bytes":"{}","valid":{valid}}}"#, hex(&bytes));
     }
 }

@@ -7,5 +7,4 @@
  */
 
 export * from "./mandate.ts";
-export * from "./nonces.ts";
 export * from "./profile.ts";

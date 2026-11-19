@@ -16,8 +16,6 @@ import {
   getOptionEncoder,
   getStructDecoder,
   getStructEncoder,
-  getU64Decoder,
-  getU64Encoder,
   getU8Decoder,
   getU8Encoder,
   transformEncoder,
@@ -39,32 +37,24 @@ import {
   type ReceiveArgs,
 } from "./index.ts";
 
-/** What an authority permits: the same for a mandate and for a signed authorization. */
+/** What an authority permits under a mandate. */
 export type Terms = {
   version: number;
-  /** 0 mainnet, 1 devnet, 2 testnet, 3 localnet: the cluster the program was built for. */
-  cluster: number;
   authority: Address;
   /** Who may pull. None is anyone. */
   spender: Option<Address>;
   notBefore: bigint;
   notAfter: Option<bigint>;
-  /** A signed authorization's nonce. A mandate does not use it. */
-  salt: bigint;
   limit: Limit;
   receive: Option<Receive>;
 };
 
 export type TermsArgs = {
-  /** 0 mainnet, 1 devnet, 2 testnet, 3 localnet: the cluster the program was built for. */
-  cluster: number;
   authority: Address;
   /** Who may pull. None is anyone. */
   spender: OptionOrNullable<Address>;
   notBefore: number | bigint;
   notAfter: OptionOrNullable<number | bigint>;
-  /** A signed authorization's nonce. A mandate does not use it. */
-  salt: number | bigint;
   limit: LimitArgs;
   receive: OptionOrNullable<ReceiveArgs>;
 };
@@ -73,12 +63,10 @@ export function getTermsEncoder(): Encoder<TermsArgs> {
   return transformEncoder(
     getStructEncoder([
       ["version", getU8Encoder()],
-      ["cluster", getU8Encoder()],
       ["authority", getAddressEncoder()],
       ["spender", getOptionEncoder(getAddressEncoder())],
       ["notBefore", getI64Encoder()],
       ["notAfter", getOptionEncoder(getI64Encoder())],
-      ["salt", getU64Encoder()],
       ["limit", getLimitEncoder()],
       ["receive", getOptionEncoder(getReceiveEncoder())],
     ]),
@@ -89,12 +77,10 @@ export function getTermsEncoder(): Encoder<TermsArgs> {
 export function getTermsDecoder(): Decoder<Terms> {
   return getStructDecoder([
     ["version", getU8Decoder()],
-    ["cluster", getU8Decoder()],
     ["authority", getAddressDecoder()],
     ["spender", getOptionDecoder(getAddressDecoder())],
     ["notBefore", getI64Decoder()],
     ["notAfter", getOptionDecoder(getI64Decoder())],
-    ["salt", getU64Decoder()],
     ["limit", getLimitDecoder()],
     ["receive", getOptionDecoder(getReceiveDecoder())],
   ]);

@@ -23,35 +23,29 @@ export const SOLANA_PULL_ERROR__INVALID_SEEDS = 0x5; // 5
 export const SOLANA_PULL_ERROR__ALREADY_INITIALIZED = 0x6; // 6
 export const SOLANA_PULL_ERROR__MALFORMED_TERMS = 0x7; // 7
 export const SOLANA_PULL_ERROR__INVALID_TERMS = 0x8; // 8
-export const SOLANA_PULL_ERROR__WRONG_CLUSTER = 0x9; // 9
-export const SOLANA_PULL_ERROR__INVALID_AUTHORITY = 0xa; // 10
-export const SOLANA_PULL_ERROR__INVALID_SIGNATURE = 0xb; // 11
-export const SOLANA_PULL_ERROR__NONCE_USED = 0xc; // 12
-export const SOLANA_PULL_ERROR__UNRENDERABLE = 0xd; // 13
-export const SOLANA_PULL_ERROR__NOT_YET_VALID = 0xe; // 14
-export const SOLANA_PULL_ERROR__EXPIRED = 0xf; // 15
-export const SOLANA_PULL_ERROR__INVALID_SPENDER = 0x10; // 16
-export const SOLANA_PULL_ERROR__NOT_CLOSABLE = 0x11; // 17
-export const SOLANA_PULL_ERROR__INVALID_PAYER = 0x12; // 18
-export const SOLANA_PULL_ERROR__INVALID_PULL = 0x13; // 19
-export const SOLANA_PULL_ERROR__LIMIT_EXCEEDED = 0x14; // 20
-export const SOLANA_PULL_ERROR__INVALID_TARGET = 0x15; // 21
-export const SOLANA_PULL_ERROR__OVERFLOW = 0x16; // 22
-export const SOLANA_PULL_ERROR__NOT_RECEIVED = 0x17; // 23
-export const SOLANA_PULL_ERROR__INVALID_EVENT_AUTHORITY = 0x18; // 24
-export const SOLANA_PULL_ERROR__NOT_DELEGATE = 0x19; // 25
-export const SOLANA_PULL_ERROR__ALLOWANCE_EXCEEDED = 0x1a; // 26
-export const SOLANA_PULL_ERROR__INSUFFICIENT_FUNDS = 0x1b; // 27
-export const SOLANA_PULL_ERROR__INVALID_PROFILE = 0x1c; // 28
-export const SOLANA_PULL_ERROR__STALE = 0x1d; // 29
-export const SOLANA_PULL_ERROR__INVALID_DESTINATION = 0x1e; // 30
-export const SOLANA_PULL_ERROR__INEXACT_AMOUNT = 0x1f; // 31
+export const SOLANA_PULL_ERROR__INVALID_AUTHORITY = 0x9; // 9
+export const SOLANA_PULL_ERROR__NOT_YET_VALID = 0xa; // 10
+export const SOLANA_PULL_ERROR__EXPIRED = 0xb; // 11
+export const SOLANA_PULL_ERROR__INVALID_SPENDER = 0xc; // 12
+export const SOLANA_PULL_ERROR__NOT_CLOSABLE = 0xd; // 13
+export const SOLANA_PULL_ERROR__INVALID_PAYER = 0xe; // 14
+export const SOLANA_PULL_ERROR__INVALID_PULL = 0xf; // 15
+export const SOLANA_PULL_ERROR__LIMIT_EXCEEDED = 0x10; // 16
+export const SOLANA_PULL_ERROR__INVALID_TARGET = 0x11; // 17
+export const SOLANA_PULL_ERROR__OVERFLOW = 0x12; // 18
+export const SOLANA_PULL_ERROR__NOT_RECEIVED = 0x13; // 19
+export const SOLANA_PULL_ERROR__INVALID_EVENT_AUTHORITY = 0x14; // 20
+export const SOLANA_PULL_ERROR__NOT_DELEGATE = 0x15; // 21
+export const SOLANA_PULL_ERROR__ALLOWANCE_EXCEEDED = 0x16; // 22
+export const SOLANA_PULL_ERROR__INSUFFICIENT_FUNDS = 0x17; // 23
+export const SOLANA_PULL_ERROR__INVALID_PROFILE = 0x18; // 24
+export const SOLANA_PULL_ERROR__STALE = 0x19; // 25
+export const SOLANA_PULL_ERROR__INVALID_DESTINATION = 0x1a; // 26
 
 export type SolanaPullError =
   | typeof SOLANA_PULL_ERROR__ALLOWANCE_EXCEEDED
   | typeof SOLANA_PULL_ERROR__ALREADY_INITIALIZED
   | typeof SOLANA_PULL_ERROR__EXPIRED
-  | typeof SOLANA_PULL_ERROR__INEXACT_AMOUNT
   | typeof SOLANA_PULL_ERROR__INSUFFICIENT_FUNDS
   | typeof SOLANA_PULL_ERROR__INVALID_ACCOUNT_LENGTH
   | typeof SOLANA_PULL_ERROR__INVALID_ACCOUNT_OWNER
@@ -62,14 +56,12 @@ export type SolanaPullError =
   | typeof SOLANA_PULL_ERROR__INVALID_PROFILE
   | typeof SOLANA_PULL_ERROR__INVALID_PULL
   | typeof SOLANA_PULL_ERROR__INVALID_SEEDS
-  | typeof SOLANA_PULL_ERROR__INVALID_SIGNATURE
   | typeof SOLANA_PULL_ERROR__INVALID_SPENDER
   | typeof SOLANA_PULL_ERROR__INVALID_TAG
   | typeof SOLANA_PULL_ERROR__INVALID_TARGET
   | typeof SOLANA_PULL_ERROR__INVALID_TERMS
   | typeof SOLANA_PULL_ERROR__LIMIT_EXCEEDED
   | typeof SOLANA_PULL_ERROR__MALFORMED_TERMS
-  | typeof SOLANA_PULL_ERROR__NONCE_USED
   | typeof SOLANA_PULL_ERROR__NOT_CLOSABLE
   | typeof SOLANA_PULL_ERROR__NOT_DELEGATE
   | typeof SOLANA_PULL_ERROR__NOT_MUTABLE
@@ -77,9 +69,7 @@ export type SolanaPullError =
   | typeof SOLANA_PULL_ERROR__NOT_SIGNER
   | typeof SOLANA_PULL_ERROR__NOT_YET_VALID
   | typeof SOLANA_PULL_ERROR__OVERFLOW
-  | typeof SOLANA_PULL_ERROR__STALE
-  | typeof SOLANA_PULL_ERROR__UNRENDERABLE
-  | typeof SOLANA_PULL_ERROR__WRONG_CLUSTER;
+  | typeof SOLANA_PULL_ERROR__STALE;
 
 let solanaPullErrorMessages: Record<SolanaPullError, string> | undefined;
 if (process.env["NODE_ENV"] !== "production") {
@@ -87,7 +77,6 @@ if (process.env["NODE_ENV"] !== "production") {
     [SOLANA_PULL_ERROR__ALLOWANCE_EXCEEDED]: `The pull exceeds what is left of the account's approval`,
     [SOLANA_PULL_ERROR__ALREADY_INITIALIZED]: `The profile exists already`,
     [SOLANA_PULL_ERROR__EXPIRED]: `The terms' window has closed`,
-    [SOLANA_PULL_ERROR__INEXACT_AMOUNT]: `An authorization anyone may fill for nothing in return runs for its whole amount, or a stranger could use it up for less`,
     [SOLANA_PULL_ERROR__INSUFFICIENT_FUNDS]: `The account pulled from holds less than the pull`,
     [SOLANA_PULL_ERROR__INVALID_ACCOUNT_LENGTH]: `The account data length is not the expected one`,
     [SOLANA_PULL_ERROR__INVALID_ACCOUNT_OWNER]: `Account expected to be owned by this program`,
@@ -98,15 +87,13 @@ if (process.env["NODE_ENV"] !== "production") {
     [SOLANA_PULL_ERROR__INVALID_PROFILE]: `The account is not the authority's profile, or the authority has none`,
     [SOLANA_PULL_ERROR__INVALID_PULL]: `The account pulled from is not the one the terms limit`,
     [SOLANA_PULL_ERROR__INVALID_SEEDS]: `The account is not the PDA for its seeds`,
-    [SOLANA_PULL_ERROR__INVALID_SIGNATURE]: `The signature does not cover the rendered terms`,
     [SOLANA_PULL_ERROR__INVALID_SPENDER]: `The signer is not the terms' spender`,
     [SOLANA_PULL_ERROR__INVALID_TAG]: `The account's tag is not the expected type`,
     [SOLANA_PULL_ERROR__INVALID_TARGET]: `A token account or mint is not the one the terms name, or not the authority's`,
     [SOLANA_PULL_ERROR__INVALID_TERMS]: `The terms break a validity rule (\`Terms::validate\`)`,
     [SOLANA_PULL_ERROR__LIMIT_EXCEEDED]: `The pull exceeds the limit`,
     [SOLANA_PULL_ERROR__MALFORMED_TERMS]: `The terms bytes are not a canonical encoding`,
-    [SOLANA_PULL_ERROR__NONCE_USED]: `The authorization's nonce was used: it ran already, or was cancelled`,
-    [SOLANA_PULL_ERROR__NOT_CLOSABLE]: `A mandate in force, or a page of nonces whose index is the profile's: \`Close\` takes only what can never be used again`,
+    [SOLANA_PULL_ERROR__NOT_CLOSABLE]: `A mandate in force: \`Close\` takes only what can never be used again`,
     [SOLANA_PULL_ERROR__NOT_DELEGATE]: `The engine is not the delegate of the account pulled from: it was never enabled, another \`Approve\` replaced it, or its approval ran out`,
     [SOLANA_PULL_ERROR__NOT_MUTABLE]: `An account this program writes directly must be writable`,
     [SOLANA_PULL_ERROR__NOT_RECEIVED]: `The authority received less than the terms require`,
@@ -114,8 +101,6 @@ if (process.env["NODE_ENV"] !== "production") {
     [SOLANA_PULL_ERROR__NOT_YET_VALID]: `The terms' window has not opened`,
     [SOLANA_PULL_ERROR__OVERFLOW]: `An amount overflowed`,
     [SOLANA_PULL_ERROR__STALE]: `The authority invalidated this mandate`,
-    [SOLANA_PULL_ERROR__UNRENDERABLE]: `A timestamp outside years 1970–9999 cannot be rendered`,
-    [SOLANA_PULL_ERROR__WRONG_CLUSTER]: `The terms are for another cluster`,
   };
 }
 

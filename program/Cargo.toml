@@ -11,14 +11,7 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"
 [lib]
 crate-type = ["cdylib", "lib"]
 
-[features]
-devnet = ["pull-core/devnet"]
-testnet = ["pull-core/testnet"]
-localnet = ["pull-core/localnet"]
-
 [dependencies]
-# In-program SHA-512: the sol_sha512 syscall is not active on every cluster.
-brine-ed25519 = { version = "0.9.3", features = ["fast-sha512"] }
 pull-core = { workspace = true }
 pinocchio = { workspace = true }
 pinocchio-system = "0.2.3"

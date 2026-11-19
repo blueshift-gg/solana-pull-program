@@ -6,8 +6,6 @@
  * @see https://github.com/codama-idl/codama
  */
 
-export * from "./decay.ts";
-export * from "./envelope.ts";
 export * from "./limit.ts";
 export * from "./per.ts";
 export * from "./receive.ts";

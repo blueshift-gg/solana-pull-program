@@ -42,7 +42,7 @@ export function getProfileTagBytes(): ReadonlyUint8Array {
   return getU8Encoder().encode(PROFILE_TAG);
 }
 
-/** An authority's profile: it numbers its mandates and holds what invalidates them and its authorizations. */
+/** An authority's profile: it numbers its mandates and holds what invalidates them. */
 export type Profile = {
   tag: number;
   authority: Address;
@@ -50,8 +50,6 @@ export type Profile = {
   mandates: bigint;
   /** Every mandate numbered this or less is invalid. */
   stale: bigint;
-  /** What its authorizations are signed under. */
-  nonceIndex: bigint;
 };
 
 export type ProfileArgs = {
@@ -60,8 +58,6 @@ export type ProfileArgs = {
   mandates: number | bigint;
   /** Every mandate numbered this or less is invalid. */
   stale: number | bigint;
-  /** What its authorizations are signed under. */
-  nonceIndex: number | bigint;
 };
 
 /** Gets the encoder for {@link ProfileArgs} account data. */
@@ -72,7 +68,6 @@ export function getProfileEncoder(): FixedSizeEncoder<ProfileArgs> {
       ["authority", getAddressEncoder()],
       ["mandates", getU64Encoder()],
       ["stale", getU64Encoder()],
-      ["nonceIndex", getU64Encoder()],
     ]),
     (value) => ({ ...value, tag: PROFILE_TAG }),
   );
@@ -85,7 +80,6 @@ export function getProfileDecoder(): FixedSizeDecoder<Profile> {
     ["authority", getAddressDecoder()],
     ["mandates", getU64Decoder()],
     ["stale", getU64Decoder()],
-    ["nonceIndex", getU64Decoder()],
   ]);
 }
 

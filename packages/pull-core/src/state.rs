@@ -41,9 +41,7 @@ macro_rules! account {
 
 /// An authority's profile. Its mandates are numbered from 1 as they are
 /// created; `mandates` is the last number used, and every mandate numbered
-/// `stale` or less is invalid. An authorization is
-/// signed over `nonce_index`, so changing it invalidates every authorization signed
-/// before. It is never closed: a profile opened again would count from zero
+/// `stale` or less is invalid. It is never closed: a profile opened again would count from zero
 /// and bring old mandates back.
 #[repr(C)]
 pub struct Profile {
@@ -51,7 +49,6 @@ pub struct Profile {
     pub authority: Pubkey,
     mandates: [u8; 8],
     stale: [u8; 8],
-    nonce_index: [u8; 8],
 }
 
 account!(Profile);
@@ -60,7 +57,6 @@ impl Profile {
     field!(tag, set_tag, u8);
     field!(mandates, set_mandates, u64);
     field!(stale, set_stale, u64);
-    field!(nonce_index, set_nonce_index, u64);
 }
 
 /// A mandate: this header, then the canonical terms.
@@ -102,41 +98,7 @@ impl Mandate {
     }
 }
 
-/// One page of the nonces an authority's signed authorizations have used or
-/// cancelled: one bit each, so authorizations run in any order. It closes once the
-/// profile's nonce index has moved on from its own.
-#[repr(C)]
-pub struct Nonces {
-    tag: [u8; 1],
-    /// The page's place, recorded when it was created at its PDA, so a fill
-    /// compares these instead of deriving the address again.
-    pub authority: Pubkey,
-    index: [u8; 8],
-    page: [u8; 8],
-    /// Paid the rent; refunded by `Close`.
-    pub payer: Pubkey,
-    bits: [u8; NONCE_BITS / 8],
-}
-
-account!(Nonces);
-
-impl Nonces {
-    field!(tag, set_tag, u8);
-    field!(index, set_index, u64);
-    field!(page, set_page, u64);
-
-    /// Mark the nonce of `salt` used; false if it already was.
-    pub fn take(&mut self, salt: u64) -> bool {
-        let bit = (salt % NONCE_BITS as u64) as usize;
-        let (byte, mask) = (&mut self.bits[bit / 8], 1 << (bit % 8));
-        let fresh = *byte & mask == 0;
-        *byte |= mask;
-        fresh
-    }
-}
-
 const _: () = {
     assert!(core::mem::size_of::<Mandate>() == MANDATE_LEN);
-    assert!(core::mem::size_of::<Nonces>() == NONCES_LEN);
     assert!(core::mem::size_of::<Profile>() == PROFILE_LEN);
 };

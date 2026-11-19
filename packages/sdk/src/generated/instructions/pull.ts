@@ -208,6 +208,7 @@ export type PullInput<
   profile: TAccountProfile;
   /** The authority's token account. */
   from: TAccountFrom;
+  /** The mint of `from`. */
   mint: TAccountMint;
   /** Where the tokens go: the one the terms name, or the spender's choice. */
   to: TAccountTo;
@@ -216,6 +217,7 @@ export type PullInput<
   tokenProgram?: TAccountTokenProgram;
   /** The spender's token account, if the authority receives something. */
   payFrom?: TAccountPayFrom;
+  /** The mint of `payTo`. */
   payMint?: TAccountPayMint;
   payTo?: TAccountPayTo;
   payProgram?: TAccountPayProgram;
@@ -474,6 +476,7 @@ export type ParsedPullInstruction<
     profile: TAccountMetas[2];
     /** The authority's token account. */
     from: TAccountMetas[3];
+    /** The mint of `from`. */
     mint: TAccountMetas[4];
     /** Where the tokens go: the one the terms name, or the spender's choice. */
     to: TAccountMetas[5];
@@ -482,6 +485,7 @@ export type ParsedPullInstruction<
     tokenProgram: TAccountMetas[8];
     /** The spender's token account, if the authority receives something. */
     payFrom?: TAccountMetas[9] | undefined;
+    /** The mint of `payTo`. */
     payMint?: TAccountMetas[10] | undefined;
     payTo?: TAccountMetas[11] | undefined;
     payProgram?: TAccountMetas[12] | undefined;

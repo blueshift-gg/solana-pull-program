@@ -106,95 +106,9 @@
       },
       {
         "kind": "accountNode",
-        "name": "nonces",
-        "docs": [
-          "One page of the nonces an authority's signed authorizations have used or cancelled."
-        ],
-        "data": {
-          "kind": "structTypeNode",
-          "fields": [
-            {
-              "kind": "structFieldTypeNode",
-              "name": "tag",
-              "defaultValueStrategy": "omitted",
-              "type": {
-                "kind": "numberTypeNode",
-                "format": "u8",
-                "endian": "le"
-              },
-              "defaultValue": {
-                "kind": "numberValueNode",
-                "number": 2
-              }
-            },
-            {
-              "kind": "structFieldTypeNode",
-              "name": "authority",
-              "type": {
-                "kind": "publicKeyTypeNode"
-              }
-            },
-            {
-              "kind": "structFieldTypeNode",
-              "name": "index",
-              "docs": [
-                "The nonce index its authorizations were signed under."
-              ],
-              "type": {
-                "kind": "numberTypeNode",
-                "format": "u64",
-                "endian": "le"
-              }
-            },
-            {
-              "kind": "structFieldTypeNode",
-              "name": "page",
-              "type": {
-                "kind": "numberTypeNode",
-                "format": "u64",
-                "endian": "le"
-              }
-            },
-            {
-              "kind": "structFieldTypeNode",
-              "name": "payer",
-              "docs": [
-                "Paid the rent; it goes back there."
-              ],
-              "type": {
-                "kind": "publicKeyTypeNode"
-              }
-            },
-            {
-              "kind": "structFieldTypeNode",
-              "name": "bits",
-              "type": {
-                "kind": "fixedSizeTypeNode",
-                "size": 128,
-                "type": {
-                  "kind": "bytesTypeNode"
-                }
-              }
-            }
-          ]
-        },
-        "pda": {
-          "kind": "pdaLinkNode",
-          "name": "nonces"
-        },
-        "discriminators": [
-          {
-            "kind": "fieldDiscriminatorNode",
-            "name": "tag",
-            "offset": 0
-          }
-        ]
-      },
-      {
-        "kind": "accountNode",
         "name": "profile",
         "docs": [
-          "An authority's profile: it numbers its mandates and holds what invalidates them and its authorizations."
+          "An authority's profile: it numbers its mandates and holds what invalidates them."
         ],
         "data": {
           "kind": "structTypeNode",
@@ -237,18 +151,6 @@
               "name": "stale",
               "docs": [
                 "Every mandate numbered this or less is invalid."
-              ],
-              "type": {
-                "kind": "numberTypeNode",
-                "format": "u64",
-                "endian": "le"
-              }
-            },
-            {
-              "kind": "structFieldTypeNode",
-              "name": "nonceIndex",
-              "docs": [
-                "What its authorizations are signed under."
               ],
               "type": {
                 "kind": "numberTypeNode",
@@ -459,7 +361,10 @@
             "name": "mint",
             "isWritable": false,
             "isSigner": false,
-            "isOptional": false
+            "isOptional": false,
+            "docs": [
+              "The mint of `from`."
+            ]
           },
           {
             "kind": "instructionAccountNode",
@@ -531,7 +436,10 @@
             "name": "payMint",
             "isWritable": false,
             "isSigner": false,
-            "isOptional": true
+            "isOptional": true,
+            "docs": [
+              "The mint of `payTo`."
+            ]
           },
           {
             "kind": "instructionAccountNode",
@@ -611,7 +519,7 @@
         "kind": "instructionNode",
         "name": "close",
         "docs": [
-          "Close what can never be used again, and return its rent. Anyone may."
+          "End a mandate and return its rent: its authority at any time, anyone once it expired or was invalidated."
         ],
         "optionalAccountStrategy": "omitted",
         "accounts": [
@@ -620,17 +528,17 @@
             "name": "closer",
             "isWritable": false,
             "isSigner": true,
-            "isOptional": false
+            "isOptional": false,
+            "docs": [
+              "The authority, or anyone once the mandate can never be used again."
+            ]
           },
           {
             "kind": "instructionAccountNode",
-            "name": "account",
+            "name": "mandate",
             "isWritable": true,
             "isSigner": false,
-            "isOptional": false,
-            "docs": [
-              "A mandate that expired or was invalidated, or a page of nonces under an old nonce index."
-            ]
+            "isOptional": false
           },
           {
             "kind": "instructionAccountNode",
@@ -709,8 +617,8 @@
         ],
         "display": {
           "kind": "instructionDisplayNode",
-          "intent": "Close an ended account",
-          "interpolatedIntent": "Close ${accounts.account}, which can never be used again, and return its rent to ${accounts.payer}"
+          "intent": "End a mandate",
+          "interpolatedIntent": "End mandate ${accounts.mandate} and return its rent to ${accounts.payer}. It can never be used again"
         }
       },
       {
@@ -842,7 +750,7 @@
         "kind": "instructionNode",
         "name": "invalidate",
         "docs": [
-          "End every mandate so far, every authorization so far, or both."
+          "End every mandate so far."
         ],
         "optionalAccountStrategy": "omitted",
         "accounts": [
@@ -926,18 +834,6 @@
               "kind": "structFieldDisplayNode",
               "skip": "always"
             }
-          },
-          {
-            "kind": "instructionArgumentNode",
-            "name": "what",
-            "docs": [
-              "1 for mandates, 2 for authorizations, 3 for both."
-            ],
-            "type": {
-              "kind": "numberTypeNode",
-              "format": "u8",
-              "endian": "le"
-            }
           }
         ],
         "discriminators": [
@@ -949,431 +845,12 @@
         ],
         "display": {
           "kind": "instructionDisplayNode",
-          "intent": "End everything",
-          "interpolatedIntent": "End every mandate (1), every signed authorization (2), or both (3): ${data.what}. This cannot be undone"
-        }
-      },
-      {
-        "kind": "instructionNode",
-        "name": "fill",
-        "docs": [
-          "Run a signed authorization, once."
-        ],
-        "optionalAccountStrategy": "omitted",
-        "accounts": [
-          {
-            "kind": "instructionAccountNode",
-            "name": "spender",
-            "isWritable": false,
-            "isSigner": true,
-            "isOptional": false
-          },
-          {
-            "kind": "instructionAccountNode",
-            "name": "payer",
-            "isWritable": true,
-            "isSigner": true,
-            "isOptional": false,
-            "docs": [
-              "Funds the page of nonces if it is new; it goes back there."
-            ]
-          },
-          {
-            "kind": "instructionAccountNode",
-            "name": "profile",
-            "isWritable": false,
-            "isSigner": false,
-            "isOptional": false
-          },
-          {
-            "kind": "instructionAccountNode",
-            "name": "nonces",
-            "isWritable": true,
-            "isSigner": false,
-            "isOptional": false
-          },
-          {
-            "kind": "instructionAccountNode",
-            "name": "systemProgram",
-            "isWritable": false,
-            "isSigner": false,
-            "isOptional": false,
-            "defaultValue": {
-              "kind": "publicKeyValueNode",
-              "publicKey": "11111111111111111111111111111111"
-            },
-            "display": {
-              "kind": "instructionAccountDisplayNode",
-              "skip": "always"
-            }
-          },
-          {
-            "kind": "instructionAccountNode",
-            "name": "from",
-            "isWritable": true,
-            "isSigner": false,
-            "isOptional": false,
-            "docs": [
-              "The authority's token account."
-            ]
-          },
-          {
-            "kind": "instructionAccountNode",
-            "name": "mint",
-            "isWritable": false,
-            "isSigner": false,
-            "isOptional": false
-          },
-          {
-            "kind": "instructionAccountNode",
-            "name": "to",
-            "isWritable": true,
-            "isSigner": false,
-            "isOptional": false,
-            "docs": [
-              "Where the tokens go: the one the terms name, or the spender's choice."
-            ]
-          },
-          {
-            "kind": "instructionAccountNode",
-            "name": "engine",
-            "isWritable": false,
-            "isSigner": false,
-            "isOptional": false,
-            "defaultValue": {
-              "kind": "publicKeyValueNode",
-              "publicKey": "58eSE1WJDvzrwz7BZ23sbsDiqa75pxetzkyRyUcPwb6E"
-            },
-            "display": {
-              "kind": "instructionAccountDisplayNode",
-              "skip": "always"
-            }
-          },
-          {
-            "kind": "instructionAccountNode",
-            "name": "program",
-            "isWritable": false,
-            "isSigner": false,
-            "isOptional": false,
-            "defaultValue": {
-              "kind": "publicKeyValueNode",
-              "publicKey": "PULLrgDYqK1yFKVTSbWieX3ARP7U2XUyrjxWXqKgVzA"
-            },
-            "display": {
-              "kind": "instructionAccountDisplayNode",
-              "skip": "always"
-            }
-          },
-          {
-            "kind": "instructionAccountNode",
-            "name": "tokenProgram",
-            "isWritable": false,
-            "isSigner": false,
-            "isOptional": false,
-            "defaultValue": {
-              "kind": "publicKeyValueNode",
-              "publicKey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-            },
-            "display": {
-              "kind": "instructionAccountDisplayNode",
-              "skip": "always"
-            }
-          },
-          {
-            "kind": "instructionAccountNode",
-            "name": "payFrom",
-            "isWritable": true,
-            "isSigner": false,
-            "isOptional": true,
-            "docs": [
-              "The spender's token account, if the authority receives something."
-            ]
-          },
-          {
-            "kind": "instructionAccountNode",
-            "name": "payMint",
-            "isWritable": false,
-            "isSigner": false,
-            "isOptional": true
-          },
-          {
-            "kind": "instructionAccountNode",
-            "name": "payTo",
-            "isWritable": true,
-            "isSigner": false,
-            "isOptional": true
-          },
-          {
-            "kind": "instructionAccountNode",
-            "name": "payProgram",
-            "isWritable": false,
-            "isSigner": false,
-            "isOptional": true
-          }
-        ],
-        "arguments": [
-          {
-            "kind": "instructionArgumentNode",
-            "name": "discriminator",
-            "defaultValueStrategy": "omitted",
-            "type": {
-              "kind": "numberTypeNode",
-              "format": "u8",
-              "endian": "le"
-            },
-            "defaultValue": {
-              "kind": "numberValueNode",
-              "number": 10
-            },
-            "display": {
-              "kind": "structFieldDisplayNode",
-              "skip": "always"
-            }
-          },
-          {
-            "kind": "instructionArgumentNode",
-            "name": "amount",
-            "type": {
-              "kind": "numberTypeNode",
-              "format": "u64",
-              "endian": "le"
-            }
-          },
-          {
-            "kind": "instructionArgumentNode",
-            "name": "envelope",
-            "type": {
-              "kind": "definedTypeLinkNode",
-              "name": "envelope"
-            },
-            "display": {
-              "kind": "structFieldDisplayNode",
-              "skip": "always"
-            }
-          },
-          {
-            "kind": "instructionArgumentNode",
-            "name": "signature",
-            "type": {
-              "kind": "fixedSizeTypeNode",
-              "size": 64,
-              "type": {
-                "kind": "bytesTypeNode"
-              }
-            },
-            "display": {
-              "kind": "structFieldDisplayNode",
-              "skip": "always"
-            }
-          },
-          {
-            "kind": "instructionArgumentNode",
-            "name": "terms",
-            "type": {
-              "kind": "definedTypeLinkNode",
-              "name": "terms"
-            }
-          }
-        ],
-        "discriminators": [
-          {
-            "kind": "fieldDiscriminatorNode",
-            "name": "discriminator",
-            "offset": 0
-          }
-        ],
-        "display": {
-          "kind": "instructionDisplayNode",
-          "intent": "Run a signed authorization",
-          "interpolatedIntent": "Take ${data.amount} from ${accounts.from} to ${accounts.to}, under terms its owner signed: ${data.terms}"
-        }
-      },
-      {
-        "kind": "instructionNode",
-        "name": "cancel",
-        "docs": [
-          "The authority ends one thing: a mandate, or with a salt one signed authorization."
-        ],
-        "optionalAccountStrategy": "omitted",
-        "accounts": [
-          {
-            "kind": "instructionAccountNode",
-            "name": "authority",
-            "isWritable": false,
-            "isSigner": true,
-            "isOptional": false
-          },
-          {
-            "kind": "instructionAccountNode",
-            "name": "payer",
-            "isWritable": true,
-            "isSigner": "either",
-            "isOptional": false,
-            "docs": [
-              "A mandate: its recorded payer. An authorization: a signer that funds the page of nonces."
-            ]
-          },
-          {
-            "kind": "instructionAccountNode",
-            "name": "profile",
-            "isWritable": false,
-            "isSigner": false,
-            "isOptional": false,
-            "defaultValue": {
-              "kind": "pdaValueNode",
-              "pda": {
-                "kind": "pdaLinkNode",
-                "name": "profile"
-              },
-              "seeds": [
-                {
-                  "kind": "pdaSeedValueNode",
-                  "name": "authority",
-                  "value": {
-                    "kind": "accountValueNode",
-                    "name": "authority"
-                  }
-                }
-              ]
-            }
-          },
-          {
-            "kind": "instructionAccountNode",
-            "name": "account",
-            "isWritable": true,
-            "isSigner": false,
-            "isOptional": false,
-            "docs": [
-              "The mandate, or the page of nonces of the authorization."
-            ]
-          },
-          {
-            "kind": "instructionAccountNode",
-            "name": "systemProgram",
-            "isWritable": false,
-            "isSigner": false,
-            "isOptional": false,
-            "defaultValue": {
-              "kind": "publicKeyValueNode",
-              "publicKey": "11111111111111111111111111111111"
-            },
-            "display": {
-              "kind": "instructionAccountDisplayNode",
-              "skip": "always"
-            }
-          },
-          {
-            "kind": "instructionAccountNode",
-            "name": "engine",
-            "isWritable": false,
-            "isSigner": false,
-            "isOptional": false,
-            "defaultValue": {
-              "kind": "publicKeyValueNode",
-              "publicKey": "58eSE1WJDvzrwz7BZ23sbsDiqa75pxetzkyRyUcPwb6E"
-            },
-            "display": {
-              "kind": "instructionAccountDisplayNode",
-              "skip": "always"
-            }
-          },
-          {
-            "kind": "instructionAccountNode",
-            "name": "program",
-            "isWritable": false,
-            "isSigner": false,
-            "isOptional": false,
-            "defaultValue": {
-              "kind": "publicKeyValueNode",
-              "publicKey": "PULLrgDYqK1yFKVTSbWieX3ARP7U2XUyrjxWXqKgVzA"
-            },
-            "display": {
-              "kind": "instructionAccountDisplayNode",
-              "skip": "always"
-            }
-          }
-        ],
-        "arguments": [
-          {
-            "kind": "instructionArgumentNode",
-            "name": "discriminator",
-            "defaultValueStrategy": "omitted",
-            "type": {
-              "kind": "numberTypeNode",
-              "format": "u8",
-              "endian": "le"
-            },
-            "defaultValue": {
-              "kind": "numberValueNode",
-              "number": 11
-            },
-            "display": {
-              "kind": "structFieldDisplayNode",
-              "skip": "always"
-            }
-          },
-          {
-            "kind": "instructionArgumentNode",
-            "name": "salt",
-            "docs": [
-              "The authorization's salt. None for a mandate."
-            ],
-            "type": {
-              "kind": "remainderOptionTypeNode",
-              "item": {
-                "kind": "numberTypeNode",
-                "format": "u64",
-                "endian": "le"
-              }
-            }
-          }
-        ],
-        "discriminators": [
-          {
-            "kind": "fieldDiscriminatorNode",
-            "name": "discriminator",
-            "offset": 0
-          }
-        ],
-        "display": {
-          "kind": "instructionDisplayNode",
-          "intent": "Cancel a mandate or an authorization",
-          "interpolatedIntent": "Cancel ${accounts.account}. It can never be used again"
+          "intent": "End every mandate",
+          "interpolatedIntent": "End every mandate of ${accounts.authority} so far. This cannot be undone"
         }
       }
     ],
     "definedTypes": [
-      {
-        "kind": "definedTypeNode",
-        "name": "envelope",
-        "docs": [
-          "What comes before the authorization text in the bytes the authority signed."
-        ],
-        "type": {
-          "kind": "enumTypeNode",
-          "variants": [
-            {
-              "kind": "enumEmptyVariantTypeNode",
-              "name": "text",
-              "discriminator": [
-                "Nothing: the text alone, as `solana:signMessage` signs it."
-              ]
-            },
-            {
-              "kind": "enumEmptyVariantTypeNode",
-              "name": "offchainMessage",
-              "discriminator": [
-                "The Offchain Message v1 preamble, as `solana:signOffchainMessage` signs it."
-              ]
-            }
-          ],
-          "size": {
-            "kind": "numberTypeNode",
-            "format": "u8",
-            "endian": "le"
-          }
-        }
-      },
       {
         "kind": "definedTypeNode",
         "name": "per",
@@ -1423,7 +900,7 @@
         "kind": "definedTypeNode",
         "name": "limit",
         "docs": [
-          "What may go out: at most `max` of `mint` may leave `from`, a token account of the authority."
+          "What may go out: at most `max` may leave `from`, a token account of the authority, in its mint."
         ],
         "type": {
           "kind": "structTypeNode",
@@ -1431,13 +908,6 @@
             {
               "kind": "structFieldTypeNode",
               "name": "from",
-              "type": {
-                "kind": "publicKeyTypeNode"
-              }
-            },
-            {
-              "kind": "structFieldTypeNode",
-              "name": "mint",
               "type": {
                 "kind": "publicKeyTypeNode"
               }
@@ -1483,54 +953,9 @@
       },
       {
         "kind": "definedTypeNode",
-        "name": "decay",
-        "docs": [
-          "The minimum moves in a straight line to `min` between `t0` and `t1`."
-        ],
-        "type": {
-          "kind": "structTypeNode",
-          "fields": [
-            {
-              "kind": "structFieldTypeNode",
-              "name": "t0",
-              "type": {
-                "kind": "numberTypeNode",
-                "format": "i64",
-                "endian": "le",
-                "display": {
-                  "kind": "dateTimeNumberDisplayNode"
-                }
-              }
-            },
-            {
-              "kind": "structFieldTypeNode",
-              "name": "t1",
-              "type": {
-                "kind": "numberTypeNode",
-                "format": "i64",
-                "endian": "le",
-                "display": {
-                  "kind": "dateTimeNumberDisplayNode"
-                }
-              }
-            },
-            {
-              "kind": "structFieldTypeNode",
-              "name": "min",
-              "type": {
-                "kind": "numberTypeNode",
-                "format": "u64",
-                "endian": "le"
-              }
-            }
-          ]
-        }
-      },
-      {
-        "kind": "definedTypeNode",
         "name": "receive",
         "docs": [
-          "What must come in: each use, at least `min` of `mint` arrives in `to`, a token account of the authority."
+          "What must come in: each use, at least `min` arrives in `to`, a token account of the authority, in its mint."
         ],
         "type": {
           "kind": "structTypeNode",
@@ -1544,35 +969,11 @@
             },
             {
               "kind": "structFieldTypeNode",
-              "name": "mint",
-              "type": {
-                "kind": "publicKeyTypeNode"
-              }
-            },
-            {
-              "kind": "structFieldTypeNode",
               "name": "min",
               "type": {
                 "kind": "numberTypeNode",
                 "format": "u64",
                 "endian": "le"
-              }
-            },
-            {
-              "kind": "structFieldTypeNode",
-              "name": "decay",
-              "type": {
-                "kind": "optionTypeNode",
-                "fixed": false,
-                "item": {
-                  "kind": "definedTypeLinkNode",
-                  "name": "decay"
-                },
-                "prefix": {
-                  "kind": "numberTypeNode",
-                  "format": "u8",
-                  "endian": "le"
-                }
               }
             }
           ]
@@ -1582,7 +983,7 @@
         "kind": "definedTypeNode",
         "name": "terms",
         "docs": [
-          "What an authority permits: the same for a mandate and for a signed authorization."
+          "What an authority permits under a mandate."
         ],
         "type": {
           "kind": "structTypeNode",
@@ -1603,18 +1004,6 @@
               "display": {
                 "kind": "structFieldDisplayNode",
                 "skip": "always"
-              }
-            },
-            {
-              "kind": "structFieldTypeNode",
-              "name": "cluster",
-              "docs": [
-                "0 mainnet, 1 devnet, 2 testnet, 3 localnet: the cluster the program was built for."
-              ],
-              "type": {
-                "kind": "numberTypeNode",
-                "format": "u8",
-                "endian": "le"
               }
             },
             {
@@ -1674,22 +1063,6 @@
                   "format": "u8",
                   "endian": "le"
                 }
-              }
-            },
-            {
-              "kind": "structFieldTypeNode",
-              "name": "salt",
-              "docs": [
-                "A signed authorization's nonce. A mandate does not use it."
-              ],
-              "type": {
-                "kind": "numberTypeNode",
-                "format": "u64",
-                "endian": "le"
-              },
-              "display": {
-                "kind": "structFieldDisplayNode",
-                "label": "Number"
               }
             },
             {
@@ -1788,48 +1161,6 @@
           {
             "kind": "variablePdaSeedNode",
             "name": "index",
-            "type": {
-              "kind": "numberTypeNode",
-              "format": "u64",
-              "endian": "le"
-            }
-          }
-        ]
-      },
-      {
-        "kind": "pdaNode",
-        "name": "nonces",
-        "seeds": [
-          {
-            "kind": "constantPdaSeedNode",
-            "type": {
-              "kind": "stringTypeNode",
-              "encoding": "utf8"
-            },
-            "value": {
-              "kind": "stringValueNode",
-              "string": "nonces"
-            }
-          },
-          {
-            "kind": "variablePdaSeedNode",
-            "name": "authority",
-            "type": {
-              "kind": "publicKeyTypeNode"
-            }
-          },
-          {
-            "kind": "variablePdaSeedNode",
-            "name": "nonceIndex",
-            "type": {
-              "kind": "numberTypeNode",
-              "format": "u64",
-              "endian": "le"
-            }
-          },
-          {
-            "kind": "variablePdaSeedNode",
-            "name": "page",
             "type": {
               "kind": "numberTypeNode",
               "format": "u64",
@@ -1991,7 +1322,7 @@
             "fields": [
               {
                 "kind": "structFieldTypeNode",
-                "name": "account",
+                "name": "mandate",
                 "type": {
                   "kind": "publicKeyTypeNode"
                 }
@@ -2051,15 +1382,6 @@
                 "type": {
                   "kind": "publicKeyTypeNode"
                 }
-              },
-              {
-                "kind": "structFieldTypeNode",
-                "name": "nonceIndex",
-                "type": {
-                  "kind": "numberTypeNode",
-                  "format": "u64",
-                  "endian": "le"
-                }
               }
             ]
           },
@@ -2118,15 +1440,6 @@
                   "format": "u64",
                   "endian": "le"
                 }
-              },
-              {
-                "kind": "structFieldTypeNode",
-                "name": "nonceIndex",
-                "type": {
-                  "kind": "numberTypeNode",
-                  "format": "u64",
-                  "endian": "le"
-                }
               }
             ]
           },
@@ -2156,154 +1469,6 @@
               "value": {
                 "kind": "bytesValueNode",
                 "data": "ff04",
-                "encoding": "base16"
-              }
-            }
-          }
-        ]
-      },
-      {
-        "kind": "eventNode",
-        "name": "filled",
-        "data": {
-          "kind": "hiddenPrefixTypeNode",
-          "type": {
-            "kind": "structTypeNode",
-            "fields": [
-              {
-                "kind": "structFieldTypeNode",
-                "name": "authority",
-                "type": {
-                  "kind": "publicKeyTypeNode"
-                }
-              },
-              {
-                "kind": "structFieldTypeNode",
-                "name": "spender",
-                "type": {
-                  "kind": "publicKeyTypeNode"
-                }
-              },
-              {
-                "kind": "structFieldTypeNode",
-                "name": "salt",
-                "type": {
-                  "kind": "numberTypeNode",
-                  "format": "u64",
-                  "endian": "le"
-                }
-              },
-              {
-                "kind": "structFieldTypeNode",
-                "name": "amount",
-                "type": {
-                  "kind": "numberTypeNode",
-                  "format": "u64",
-                  "endian": "le"
-                }
-              },
-              {
-                "kind": "structFieldTypeNode",
-                "name": "paid",
-                "type": {
-                  "kind": "numberTypeNode",
-                  "format": "u64",
-                  "endian": "le"
-                }
-              }
-            ]
-          },
-          "prefix": [
-            {
-              "kind": "constantValueNode",
-              "type": {
-                "kind": "bytesTypeNode"
-              },
-              "value": {
-                "kind": "bytesValueNode",
-                "data": "ff0a",
-                "encoding": "base16"
-              }
-            }
-          ]
-        },
-        "discriminators": [
-          {
-            "kind": "constantDiscriminatorNode",
-            "offset": 0,
-            "constant": {
-              "kind": "constantValueNode",
-              "type": {
-                "kind": "bytesTypeNode"
-              },
-              "value": {
-                "kind": "bytesValueNode",
-                "data": "ff0a",
-                "encoding": "base16"
-              }
-            }
-          }
-        ]
-      },
-      {
-        "kind": "eventNode",
-        "name": "cancelled",
-        "data": {
-          "kind": "hiddenPrefixTypeNode",
-          "type": {
-            "kind": "structTypeNode",
-            "fields": [
-              {
-                "kind": "structFieldTypeNode",
-                "name": "authority",
-                "type": {
-                  "kind": "publicKeyTypeNode"
-                }
-              },
-              {
-                "kind": "structFieldTypeNode",
-                "name": "account",
-                "type": {
-                  "kind": "publicKeyTypeNode"
-                }
-              },
-              {
-                "kind": "structFieldTypeNode",
-                "name": "salt",
-                "type": {
-                  "kind": "numberTypeNode",
-                  "format": "u64",
-                  "endian": "le"
-                }
-              }
-            ]
-          },
-          "prefix": [
-            {
-              "kind": "constantValueNode",
-              "type": {
-                "kind": "bytesTypeNode"
-              },
-              "value": {
-                "kind": "bytesValueNode",
-                "data": "ff0b",
-                "encoding": "base16"
-              }
-            }
-          ]
-        },
-        "discriminators": [
-          {
-            "kind": "constantDiscriminatorNode",
-            "offset": 0,
-            "constant": {
-              "kind": "constantValueNode",
-              "type": {
-                "kind": "bytesTypeNode"
-              },
-              "value": {
-                "kind": "bytesValueNode",
-                "data": "ff0b",
                 "encoding": "base16"
               }
             }
@@ -2368,141 +1533,111 @@
       },
       {
         "kind": "errorNode",
-        "name": "wrongCluster",
-        "code": 9,
-        "message": "The terms are for another cluster"
-      },
-      {
-        "kind": "errorNode",
         "name": "invalidAuthority",
-        "code": 10,
+        "code": 9,
         "message": "The signer is not the terms' authority"
       },
       {
         "kind": "errorNode",
-        "name": "invalidSignature",
-        "code": 11,
-        "message": "The signature does not cover the rendered terms"
-      },
-      {
-        "kind": "errorNode",
-        "name": "nonceUsed",
-        "code": 12,
-        "message": "The authorization's nonce was used: it ran already, or was cancelled"
-      },
-      {
-        "kind": "errorNode",
-        "name": "unrenderable",
-        "code": 13,
-        "message": "A timestamp outside years 1970–9999 cannot be rendered"
-      },
-      {
-        "kind": "errorNode",
         "name": "notYetValid",
-        "code": 14,
+        "code": 10,
         "message": "The terms' window has not opened"
       },
       {
         "kind": "errorNode",
         "name": "expired",
-        "code": 15,
+        "code": 11,
         "message": "The terms' window has closed"
       },
       {
         "kind": "errorNode",
         "name": "invalidSpender",
-        "code": 16,
+        "code": 12,
         "message": "The signer is not the terms' spender"
       },
       {
         "kind": "errorNode",
         "name": "notClosable",
-        "code": 17,
-        "message": "A mandate in force, or a page of nonces whose index is the profile's: `Close` takes only what can never be used again"
+        "code": 13,
+        "message": "A mandate in force: `Close` takes only what can never be used again"
       },
       {
         "kind": "errorNode",
         "name": "invalidPayer",
-        "code": 18,
+        "code": 14,
         "message": "The account is not the one that paid the rent being refunded"
       },
       {
         "kind": "errorNode",
         "name": "invalidPull",
-        "code": 19,
+        "code": 15,
         "message": "The account pulled from is not the one the terms limit"
       },
       {
         "kind": "errorNode",
         "name": "limitExceeded",
-        "code": 20,
+        "code": 16,
         "message": "The pull exceeds the limit"
       },
       {
         "kind": "errorNode",
         "name": "invalidTarget",
-        "code": 21,
+        "code": 17,
         "message": "A token account or mint is not the one the terms name, or not the authority's"
       },
       {
         "kind": "errorNode",
         "name": "overflow",
-        "code": 22,
+        "code": 18,
         "message": "An amount overflowed"
       },
       {
         "kind": "errorNode",
         "name": "notReceived",
-        "code": 23,
+        "code": 19,
         "message": "The authority received less than the terms require"
       },
       {
         "kind": "errorNode",
         "name": "invalidEventAuthority",
-        "code": 24,
+        "code": 20,
         "message": "Only the engine PDA may invoke the event instruction"
       },
       {
         "kind": "errorNode",
         "name": "notDelegate",
-        "code": 25,
+        "code": 21,
         "message": "The engine is not the delegate of the account pulled from: it was never enabled, another `Approve` replaced it, or its approval ran out"
       },
       {
         "kind": "errorNode",
         "name": "allowanceExceeded",
-        "code": 26,
+        "code": 22,
         "message": "The pull exceeds what is left of the account's approval"
       },
       {
         "kind": "errorNode",
         "name": "insufficientFunds",
-        "code": 27,
+        "code": 23,
         "message": "The account pulled from holds less than the pull"
       },
       {
         "kind": "errorNode",
         "name": "invalidProfile",
-        "code": 28,
+        "code": 24,
         "message": "The account is not the authority's profile, or the authority has none"
       },
       {
         "kind": "errorNode",
         "name": "stale",
-        "code": 29,
+        "code": 25,
         "message": "The authority invalidated this mandate"
       },
       {
         "kind": "errorNode",
         "name": "invalidDestination",
-        "code": 30,
+        "code": 26,
         "message": "The tokens would not go to the account the terms name"
-      },
-      {
-        "kind": "errorNode",
-        "name": "inexactAmount",
-        "code": 31,
-        "message": "An authorization anyone may fill for nothing in return runs for its whole amount, or a stranger could use it up for less"
       }
     ],
     "constants": [

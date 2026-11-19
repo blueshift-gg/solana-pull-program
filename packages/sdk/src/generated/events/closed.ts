@@ -33,7 +33,7 @@ export function getClosedEventDiscriminatorBytes(): ReadonlyUint8Array {
   return getBytesEncoder().encode(CLOSED_EVENT_DISCRIMINATOR);
 }
 
-export type ClosedEvent = { account: Address; closer: Address };
+export type ClosedEvent = { mandate: Address; closer: Address };
 
 export type ClosedEventArgs = ClosedEvent;
 
@@ -41,7 +41,7 @@ export type ClosedEventArgs = ClosedEvent;
 export function getClosedEventEncoder(): FixedSizeEncoder<ClosedEventArgs> {
   return getHiddenPrefixEncoder(
     getStructEncoder([
-      ["account", getAddressEncoder()],
+      ["mandate", getAddressEncoder()],
       ["closer", getAddressEncoder()],
     ]),
     [getConstantEncoder(CLOSED_EVENT_DISCRIMINATOR)],
@@ -52,7 +52,7 @@ export function getClosedEventEncoder(): FixedSizeEncoder<ClosedEventArgs> {
 export function getClosedEventDecoder(): FixedSizeDecoder<ClosedEvent> {
   return getHiddenPrefixDecoder(
     getStructDecoder([
-      ["account", getAddressDecoder()],
+      ["mandate", getAddressDecoder()],
       ["closer", getAddressDecoder()],
     ]),
     [getConstantDecoder(CLOSED_EVENT_DISCRIMINATOR)],

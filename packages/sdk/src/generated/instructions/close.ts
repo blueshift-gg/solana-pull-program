@@ -48,7 +48,7 @@ export function getCloseDiscriminatorBytes(): ReadonlyUint8Array {
 export type CloseInstruction<
   TProgram extends string = typeof SOLANA_PULL_PROGRAM_ADDRESS,
   TAccountCloser extends string | AccountMeta<string> = string,
-  TAccountAccount extends string | AccountMeta<string> = string,
+  TAccountMandate extends string | AccountMeta<string> = string,
   TAccountPayer extends string | AccountMeta<string> = string,
   TAccountProfile extends string | AccountMeta<string> = string,
   TAccountEngine extends string | AccountMeta<string> =
@@ -64,9 +64,9 @@ export type CloseInstruction<
         ? ReadonlySignerAccount<TAccountCloser> &
             AccountSignerMeta<TAccountCloser>
         : TAccountCloser,
-      TAccountAccount extends string
-        ? WritableAccount<TAccountAccount>
-        : TAccountAccount,
+      TAccountMandate extends string
+        ? WritableAccount<TAccountMandate>
+        : TAccountMandate,
       TAccountPayer extends string
         ? WritableAccount<TAccountPayer>
         : TAccountPayer,
@@ -110,15 +110,15 @@ export function getCloseInstructionDataCodec(): FixedSizeCodec<
 
 export type CloseInput<
   TAccountCloser extends InstructionSignerInput = InstructionSignerInput,
-  TAccountAccount extends InstructionAccountInput = InstructionAccountInput,
+  TAccountMandate extends InstructionAccountInput = InstructionAccountInput,
   TAccountPayer extends InstructionAccountInput = InstructionAccountInput,
   TAccountProfile extends InstructionAccountInput = InstructionAccountInput,
   TAccountEngine extends InstructionAccountInput = InstructionAccountInput,
   TAccountProgram extends InstructionAccountInput = InstructionAccountInput,
 > = {
+  /** The authority, or anyone once the mandate can never be used again. */
   closer: TAccountCloser;
-  /** A mandate that expired or was invalidated, or a page of nonces under an old nonce index. */
-  account: TAccountAccount;
+  mandate: TAccountMandate;
   /** The recorded payer; receives the rent. */
   payer: TAccountPayer;
   profile: TAccountProfile;
@@ -128,7 +128,7 @@ export type CloseInput<
 
 export function getCloseInstruction<
   TAccountCloser extends InstructionSignerInput,
-  TAccountAccount extends InstructionAccountInput,
+  TAccountMandate extends InstructionAccountInput,
   TAccountPayer extends InstructionAccountInput,
   TAccountProfile extends InstructionAccountInput,
   TAccountEngine extends InstructionAccountInput,
@@ -137,7 +137,7 @@ export function getCloseInstruction<
 >(
   input: CloseInput<
     TAccountCloser,
-    TAccountAccount,
+    TAccountMandate,
     TAccountPayer,
     TAccountProfile,
     TAccountEngine,
@@ -151,8 +151,8 @@ export function getCloseInstruction<
     InstructionAccountInputAddress<TAccountCloser>
   >,
   ResolvedInstructionAccountMeta<
-    TAccountAccount,
-    InstructionAccountInputAddress<TAccountAccount>
+    TAccountMandate,
+    InstructionAccountInputAddress<TAccountMandate>
   >,
   ResolvedInstructionAccountMeta<
     TAccountPayer,
@@ -180,8 +180,8 @@ export function getCloseInstruction<
   // Original accounts.
   const originalAccounts = {
     closer: { value: input.closer ?? null, isSigner: true, isWritable: false },
-    account: {
-      value: input.account ?? null,
+    mandate: {
+      value: input.mandate ?? null,
       isSigner: false,
       isWritable: true,
     },
@@ -216,7 +216,7 @@ export function getCloseInstruction<
   return Object.freeze({
     accounts: [
       getAccountMeta("closer", accounts.closer),
-      getAccountMeta("account", accounts.account),
+      getAccountMeta("mandate", accounts.mandate),
       getAccountMeta("payer", accounts.payer),
       getAccountMeta("profile", accounts.profile),
       getAccountMeta("engine", accounts.engine),
@@ -231,8 +231,8 @@ export function getCloseInstruction<
       InstructionAccountInputAddress<TAccountCloser>
     >,
     ResolvedInstructionAccountMeta<
-      TAccountAccount,
-      InstructionAccountInputAddress<TAccountAccount>
+      TAccountMandate,
+      InstructionAccountInputAddress<TAccountMandate>
     >,
     ResolvedInstructionAccountMeta<
       TAccountPayer,
@@ -259,9 +259,9 @@ export type ParsedCloseInstruction<
 > = {
   programAddress: Address<TProgram>;
   accounts: {
+    /** The authority, or anyone once the mandate can never be used again. */
     closer: TAccountMetas[0];
-    /** A mandate that expired or was invalidated, or a page of nonces under an old nonce index. */
-    account: TAccountMetas[1];
+    mandate: TAccountMetas[1];
     /** The recorded payer; receives the rent. */
     payer: TAccountMetas[2];
     profile: TAccountMetas[3];
@@ -298,7 +298,7 @@ export function parseCloseInstruction<
     programAddress: instruction.programAddress,
     accounts: {
       closer: getNextAccount(),
-      account: getNextAccount(),
+      mandate: getNextAccount(),
       payer: getNextAccount(),
       profile: getNextAccount(),
       engine: getNextAccount(),

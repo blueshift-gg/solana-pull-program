@@ -77,32 +77,19 @@ export type InvalidateInstruction<
     ]
   >;
 
-export type InvalidateInstructionData = {
-  discriminator: number;
-  /** 1 for mandates, 2 for authorizations, 3 for both. */
-  what: number;
-};
+export type InvalidateInstructionData = { discriminator: number };
 
-export type InvalidateInstructionDataArgs = {
-  /** 1 for mandates, 2 for authorizations, 3 for both. */
-  what: number;
-};
+export type InvalidateInstructionDataArgs = {};
 
 export function getInvalidateInstructionDataEncoder(): FixedSizeEncoder<InvalidateInstructionDataArgs> {
   return transformEncoder(
-    getStructEncoder([
-      ["discriminator", getU8Encoder()],
-      ["what", getU8Encoder()],
-    ]),
+    getStructEncoder([["discriminator", getU8Encoder()]]),
     (value) => ({ ...value, discriminator: INVALIDATE_DISCRIMINATOR }),
   );
 }
 
 export function getInvalidateInstructionDataDecoder(): FixedSizeDecoder<InvalidateInstructionData> {
-  return getStructDecoder([
-    ["discriminator", getU8Decoder()],
-    ["what", getU8Decoder()],
-  ]);
+  return getStructDecoder([["discriminator", getU8Decoder()]]);
 }
 
 export function getInvalidateInstructionDataCodec(): FixedSizeCodec<
@@ -125,7 +112,6 @@ export type InvalidateAsyncInput<
   profile?: TAccountProfile;
   engine?: TAccountEngine;
   program?: TAccountProgram;
-  what: InvalidateInstructionDataArgs["what"];
 };
 
 export async function getInvalidateInstructionAsync<
@@ -193,9 +179,6 @@ export async function getInvalidateInstructionAsync<
     ResolvedInstructionAccount
   >;
 
-  // Original args.
-  const args = { ...input };
-
   // Resolve default values.
   if (!accounts.profile.value) {
     accounts.profile.value = await findProfilePda(
@@ -224,9 +207,7 @@ export async function getInvalidateInstructionAsync<
       getAccountMeta("engine", accounts.engine),
       getAccountMeta("program", accounts.program),
     ],
-    data: getInvalidateInstructionDataEncoder().encode(
-      args as InvalidateInstructionDataArgs,
-    ),
+    data: getInvalidateInstructionDataEncoder().encode({}),
     programAddress,
   } as InvalidateInstruction<
     TProgramAddress,
@@ -259,7 +240,6 @@ export type InvalidateInput<
   profile: TAccountProfile;
   engine?: TAccountEngine;
   program?: TAccountProgram;
-  what: InvalidateInstructionDataArgs["what"];
 };
 
 export function getInvalidateInstruction<
@@ -325,9 +305,6 @@ export function getInvalidateInstruction<
     ResolvedInstructionAccount
   >;
 
-  // Original args.
-  const args = { ...input };
-
   // Resolve default values.
   if (!accounts.engine.value) {
     accounts.engine.value =
@@ -345,9 +322,7 @@ export function getInvalidateInstruction<
       getAccountMeta("engine", accounts.engine),
       getAccountMeta("program", accounts.program),
     ],
-    data: getInvalidateInstructionDataEncoder().encode(
-      args as InvalidateInstructionDataArgs,
-    ),
+    data: getInvalidateInstructionDataEncoder().encode({}),
     programAddress,
   } as InvalidateInstruction<
     TProgramAddress,

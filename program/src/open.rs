@@ -1,5 +1,5 @@
 use crate::events::emit;
-use crate::helpers::{check_pda, create_pda, entropy};
+use crate::helpers::{check_pda, create_pda};
 use crate::state::Profile;
 use pinocchio::log::sol_log;
 use pinocchio::{account_info::AccountInfo, program_error::ProgramError, ProgramResult};
@@ -7,12 +7,11 @@ use pull_core::{constants::*, errors::PullError};
 
 /// # Open
 ///
-/// Create the authority's profile, once: what numbers its mandates and what
-/// its authorizations are signed under. It goes in the transaction that enables the
-/// first token account.
+/// Create the authority's profile, once: what numbers its mandates and
+/// invalidates them. It goes in the transaction that enables the first token
+/// account.
 ///
 /// > Create the Profile PDA
-/// > Start the nonce index where nobody could have signed for it
 ///
 /// Accounts:
 ///
@@ -31,7 +30,6 @@ use pull_core::{constants::*, errors::PullError};
 /// Event Data:
 /// - discriminator: u8, (255u8, 3u8)
 /// - authority: Pubkey,
-/// - nonce_index: u64,
 pub struct Open<'a> {
     pub authority: &'a AccountInfo,
     pub payer: &'a AccountInfo,
@@ -83,17 +81,15 @@ impl<'a> Open<'a> {
         // SAFETY: the account was just created with `PROFILE_LEN` zeroed bytes.
         let profile =
             unsafe { Profile::from_bytes_unchecked_mut(self.profile.borrow_mut_data_unchecked()) };
-        let nonce_index = entropy()?;
         profile.set_tag(PROFILE_TAG);
         profile.authority = *authority;
-        profile.set_nonce_index(nonce_index);
 
         // Log the Open Event
         emit(
             self.engine,
             self.program,
             *Self::DISCRIMINATOR,
-            &[authority, &nonce_index.to_le_bytes()],
+            &[authority],
         )
     }
 }

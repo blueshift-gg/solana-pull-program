@@ -1,7 +1,7 @@
 {
     "name": "@solana-pull/sdk",
     "version": "0.0.1",
-    "description": "The Pull program for @solana/kit: the generated client, the journeys, the authorization text and what a wallet shows",
+    "description": "The Pull program for @solana/kit: the generated client, the journeys and what a wallet shows",
     "license": "MIT",
     "private": true,
     "type": "module",

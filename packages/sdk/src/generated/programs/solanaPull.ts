@@ -34,40 +34,29 @@ import {
 } from "@solana/kit/program-client-core";
 import {
   getMandateCodec,
-  getNoncesCodec,
   getProfileCodec,
   type Mandate,
   type MandateArgs,
-  type Nonces,
-  type NoncesArgs,
   type Profile,
   type ProfileArgs,
 } from "../accounts/index.ts";
 import {
-  getCancelInstructionAsync,
   getCloseInstruction,
   getCreateInstructionAsync,
-  getFillInstruction,
   getInvalidateInstructionAsync,
   getOpenInstructionAsync,
   getPullInstruction,
-  parseCancelInstruction,
   parseCloseInstruction,
   parseCreateInstruction,
-  parseFillInstruction,
   parseInvalidateInstruction,
   parseOpenInstruction,
   parsePullInstruction,
-  type CancelAsyncInput,
   type CloseInput,
   type CreateAsyncInput,
-  type FillInput,
   type InvalidateAsyncInput,
   type OpenAsyncInput,
-  type ParsedCancelInstruction,
   type ParsedCloseInstruction,
   type ParsedCreateInstruction,
-  type ParsedFillInstruction,
   type ParsedInvalidateInstruction,
   type ParsedOpenInstruction,
   type ParsedPullInstruction,
@@ -76,7 +65,6 @@ import {
 import {
   findEnginePda,
   findMandatePda,
-  findNoncesPda,
   findProfilePda,
 } from "../pdas/index.ts";
 
@@ -85,11 +73,9 @@ export const SOLANA_PULL_PROGRAM_ADDRESS =
 
 export const SolanaPullAccount = {
   0: "Mandate",
-  1: "Nonces",
-  2: "Profile",
+  1: "Profile",
   Mandate: 0,
-  Nonces: 1,
-  Profile: 2,
+  Profile: 1,
 } as const;
 
 export type SolanaPullAccount = (typeof SolanaPullAccount)[Exclude<
@@ -103,9 +89,6 @@ export function identifySolanaPullAccount(
   const data = "data" in account ? account.data : account;
   if (containsBytes(data, getU8Encoder().encode(1), 0)) {
     return SolanaPullAccount.Mandate;
-  }
-  if (containsBytes(data, getU8Encoder().encode(2), 0)) {
-    return SolanaPullAccount.Nonces;
   }
   if (containsBytes(data, getU8Encoder().encode(3), 0)) {
     return SolanaPullAccount.Profile;
@@ -122,15 +105,11 @@ export const SolanaPullEvent = {
   2: "Closed",
   3: "Opened",
   4: "Invalidated",
-  5: "Filled",
-  6: "Cancelled",
   Created: 0,
   Pulled: 1,
   Closed: 2,
   Opened: 3,
   Invalidated: 4,
-  Filled: 5,
-  Cancelled: 6,
 } as const;
 
 export type SolanaPullEvent = (typeof SolanaPullEvent)[Exclude<
@@ -157,12 +136,6 @@ export function identifySolanaPullEvent(
   if (containsBytes(data, new Uint8Array([255, 4]), 0)) {
     return SolanaPullEvent.Invalidated;
   }
-  if (containsBytes(data, new Uint8Array([255, 10]), 0)) {
-    return SolanaPullEvent.Filled;
-  }
-  if (containsBytes(data, new Uint8Array([255, 11]), 0)) {
-    return SolanaPullEvent.Cancelled;
-  }
   throw new Error(
     "The provided event could not be identified as a solanaPull event.",
   );
@@ -174,15 +147,11 @@ export const SolanaPullInstruction = {
   2: "Close",
   3: "Open",
   4: "Invalidate",
-  5: "Fill",
-  6: "Cancel",
   Create: 0,
   Pull: 1,
   Close: 2,
   Open: 3,
   Invalidate: 4,
-  Fill: 5,
-  Cancel: 6,
 } as const;
 
 export type SolanaPullInstruction = (typeof SolanaPullInstruction)[Exclude<
@@ -209,12 +178,6 @@ export function identifySolanaPullInstruction(
   if (containsBytes(data, getU8Encoder().encode(4), 0)) {
     return SolanaPullInstruction.Invalidate;
   }
-  if (containsBytes(data, getU8Encoder().encode(10), 0)) {
-    return SolanaPullInstruction.Fill;
-  }
-  if (containsBytes(data, getU8Encoder().encode(11), 0)) {
-    return SolanaPullInstruction.Cancel;
-  }
   throw new SolanaError(
     SOLANA_ERROR__PROGRAM_CLIENTS__FAILED_TO_IDENTIFY_INSTRUCTION,
     { instructionData: data, programName: "solanaPull" },
@@ -238,13 +201,7 @@ export type ParsedSolanaPullInstruction<
     } & ParsedOpenInstruction<TProgram>)
   | ({
       instructionType: typeof SolanaPullInstruction.Invalidate;
-    } & ParsedInvalidateInstruction<TProgram>)
-  | ({
-      instructionType: typeof SolanaPullInstruction.Fill;
-    } & ParsedFillInstruction<TProgram>)
-  | ({
-      instructionType: typeof SolanaPullInstruction.Cancel;
-    } & ParsedCancelInstruction<TProgram>);
+    } & ParsedInvalidateInstruction<TProgram>);
 
 export function parseSolanaPullInstruction<TProgram extends string>(
   instruction: Instruction<TProgram> & InstructionWithData<ReadonlyUint8Array>,
@@ -286,20 +243,6 @@ export function parseSolanaPullInstruction<TProgram extends string>(
         ...parseInvalidateInstruction(instruction),
       };
     }
-    case SolanaPullInstruction.Fill: {
-      assertIsInstructionWithAccounts(instruction);
-      return {
-        instructionType: SolanaPullInstruction.Fill,
-        ...parseFillInstruction(instruction),
-      };
-    }
-    case SolanaPullInstruction.Cancel: {
-      assertIsInstructionWithAccounts(instruction);
-      return {
-        instructionType: SolanaPullInstruction.Cancel,
-        ...parseCancelInstruction(instruction),
-      };
-    }
     default:
       throw new SolanaError(
         SOLANA_ERROR__PROGRAM_CLIENTS__UNRECOGNIZED_INSTRUCTION_TYPE,
@@ -323,8 +266,6 @@ export type SolanaPullPlugin = {
 export type SolanaPullPluginAccounts = {
   mandate: ReturnType<typeof getMandateCodec> &
     SelfFetchFunctions<MandateArgs, Mandate>;
-  nonces: ReturnType<typeof getNoncesCodec> &
-    SelfFetchFunctions<NoncesArgs, Nonces>;
   profile: ReturnType<typeof getProfileCodec> &
     SelfFetchFunctions<ProfileArgs, Profile>;
 };
@@ -346,19 +287,12 @@ export type SolanaPullPluginInstructions = {
     input: InvalidateAsyncInput,
   ) => ReturnType<typeof getInvalidateInstructionAsync> &
     SelfPlanAndSendFunctions;
-  fill: (
-    input: FillInput,
-  ) => ReturnType<typeof getFillInstruction> & SelfPlanAndSendFunctions;
-  cancel: (
-    input: CancelAsyncInput,
-  ) => ReturnType<typeof getCancelInstructionAsync> & SelfPlanAndSendFunctions;
 };
 
 export type SolanaPullPluginPdas = {
   engine: typeof findEnginePda;
   profile: typeof findProfilePda;
   mandate: typeof findMandatePda;
-  nonces: typeof findNoncesPda;
 };
 
 export type SolanaPullPluginRequirements = ClientWithRpc<
@@ -375,7 +309,6 @@ export function solanaPullProgram() {
       solanaPull: {
         accounts: {
           mandate: addSelfFetchFunctions(client, getMandateCodec()),
-          nonces: addSelfFetchFunctions(client, getNoncesCodec()),
           profile: addSelfFetchFunctions(client, getProfileCodec()),
         },
         instructions: {
@@ -395,19 +328,11 @@ export function solanaPullProgram() {
               client,
               getInvalidateInstructionAsync(input),
             ),
-          fill: (input) =>
-            addSelfPlanAndSendFunctions(client, getFillInstruction(input)),
-          cancel: (input) =>
-            addSelfPlanAndSendFunctions(
-              client,
-              getCancelInstructionAsync(input),
-            ),
         },
         pdas: {
           engine: findEnginePda,
           profile: findProfilePda,
           mandate: findMandatePda,
-          nonces: findNoncesPda,
         },
         identifyAccount: identifySolanaPullAccount,
         identifyInstruction: identifySolanaPullInstruction,

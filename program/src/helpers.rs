@@ -1,4 +1,4 @@
-//! Account lifecycle, token views and transfers, and entropy.
+//! Account lifecycle, token views and transfers.
 
 use pinocchio::{
     account_info::AccountInfo,
@@ -172,27 +172,4 @@ pub fn transfer(
         &[from, mint, to, authority],
         signers,
     )
-}
-
-/// Eight bytes nobody can know before this slot: the start of the newest
-/// slot hash. What a nonce index moves by, so nobody can have a signature
-/// ready for the next one.
-#[cfg(target_os = "solana")]
-pub fn entropy() -> Result<u64, ProgramError> {
-    let mut out = [0; 8];
-    // SlotHashes: a u64 count, then (slot: u64, hash) entries, newest first.
-    // SAFETY: `sol_get_sysvar` reads a 32-byte id and writes exactly 8 bytes.
-    let failed = unsafe {
-        pinocchio::syscalls::sol_get_sysvar(SLOT_HASHES.as_ptr(), out.as_mut_ptr(), 16, 8)
-    };
-    match failed {
-        0 => Ok(u64::from_le_bytes(out)),
-        _ => Err(ProgramError::UnsupportedSysvar),
-    }
-}
-
-/// Host builds (unit tests, clippy) have no syscall to link against.
-#[cfg(not(target_os = "solana"))]
-pub fn entropy() -> Result<u64, ProgramError> {
-    Ok(0)
 }

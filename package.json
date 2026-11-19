@@ -3,8 +3,7 @@
     "private": true,
     "type": "module",
     "workspaces": [
-        "packages/sdk",
-        "packages/wallet-standard"
+        "packages/sdk"
     ],
     "scripts": {
         "typecheck": "npm run typecheck --workspaces --if-present",
