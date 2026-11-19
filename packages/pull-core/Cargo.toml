@@ -1,6 +1,6 @@
 [package]
 name = "pull-core"
-version = "0.1.0-rc.1"
+version = "0.0.1"
 edition = "2021"
 description = "Pull program terms, canonical encoding, account layouts and errors"
 license = "MIT"
