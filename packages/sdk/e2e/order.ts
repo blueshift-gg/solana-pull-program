@@ -9,7 +9,7 @@ export async function order() {
 
     // Sell 100 USDC for at least 0.52 SOL, to anyone, for an hour: one transaction
     const start = await now();
-    const sell = { authority: owner.address, limit: { from: usdc, max: 100_000_000n, per: { __kind: 'Total' as const }, to: null }, notAfter: start + 3_600n, notBefore: start, receive: { min: 520_000_000n, to: sol }, spender: null };
+    const sell = { authority: owner.address, limit: { from: usdc, max: 100_000_000n, period: null, to: null }, notAfter: start + 3_600n, notBefore: start, receive: { min: 520_000_000n, to: sol }, spender: null };
     const { instructions, mandate } = await onboardInstructions(rpc, { authority: owner, payer: owner, terms: sell });
     await send(owner, instructions);
     const status = await fetchMandateStatus(rpc, mandate);
@@ -24,7 +24,7 @@ export async function order() {
     check(event.type === 'pulled' && event.amount === 100_000_000n && event.paid === 520_000_000n, `a solver fills it: 100 USDC out, 0.52 SOL in (${filled.units} CU)`);
     await refused(fill(solver), SOLANA_PULL_ERROR__LIMIT_EXCEEDED, 'a second fill');
 
-    // The owner closes it and has the rent back
-    const closed = await send(owner, [await closeMandateInstruction({ closer: owner, mandate: status.mandate! })]);
-    check(closed.events[0].type === 'closed' && (await fetchMandateStatus(rpc, mandate)).state === 'missing', 'the owner closes the filled order');
+    // It is used up, so anyone may close it; the rent goes back to the owner, who paid it
+    const closed = await send(solver, [await closeMandateInstruction({ closer: solver, mandate: status.mandate! })]);
+    check(closed.events[0].type === 'closed' && (await fetchMandateStatus(rpc, mandate)).state === 'missing', 'the solver closes the filled order');
 }

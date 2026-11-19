@@ -1,8 +1,6 @@
 use five8_const::decode_32_const;
 use pinocchio::pubkey::Pubkey;
 
-/// Terms format version.
-pub const VERSION: u8 = 1;
 /// 9999-12-31T23:59:59Z: the latest timestamp terms may hold, which keeps
 /// time arithmetic from overflowing.
 pub const MAX_TIME: i64 = 253_402_300_799;
@@ -30,6 +28,8 @@ pub const PROFILE_TAG: u8 = 3;
 /// Self-CPI event instruction discriminator.
 pub const EVENT_DISCRIMINATOR: u8 = 255;
 
-/// Fixed header; the canonical terms follow it.
-pub const MANDATE_LEN: usize = 1 + 8 + 8 + 32 + 8 + 2; // 59
+/// Terms: authority, spender, not_before, not_after, from, max, period, to, receive.to, receive.min.
+pub const TERMS_LEN: usize = 32 + 32 + 8 + 8 + 32 + 8 + 4 + 32 + 32 + 8; // 196
+/// Fixed header; the terms follow it.
+pub const MANDATE_LEN: usize = 1 + 8 + 8 + 32 + 8; // 57
 pub const PROFILE_LEN: usize = 1 + 32 + 8 + 8; // 49

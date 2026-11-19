@@ -121,6 +121,9 @@ impl<'a> Pull<'a> {
     pub fn process(&mut self) -> ProgramResult {
         let now = Clock::get()?.unix_timestamp;
         let amount = self.amount;
+        if amount == 0 {
+            return Err(PullError::ZeroAmount.into());
+        }
 
         // Two views never share an account
         if self.mandate.key().eq(self.profile.key()) {
@@ -153,7 +156,7 @@ impl<'a> Pull<'a> {
         }
 
         // The amount must fit what is left of the limit
-        let spent = mandate.spent(limit.per, terms.not_before, now);
+        let spent = mandate.spent(limit.period, terms.not_before, now);
         let spent = spent.checked_add(amount).ok_or(PullError::Overflow)?;
         if spent > limit.max {
             return Err(PullError::LimitExceeded.into());

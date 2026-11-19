@@ -7,6 +7,7 @@ import {
     address,
     type Base58EncodedBytes,
     getAddressDecoder,
+    getBase58Decoder,
     getBase58Encoder,
     getBase64Encoder,
     getU64Encoder,
@@ -65,10 +66,8 @@ export function isValid(t: Terms): boolean {
     const time = (at: bigint) => at >= 0n && at <= MAX_TIME;
     const [notAfter, receive] = [some(t.notAfter), some(t.receive)];
     const window = time(t.notBefore) && (notAfter === null || (notAfter > t.notBefore && time(notAfter)));
-    const { per } = t.limit;
-    const limit = t.limit.max > 0n && !(per.__kind === 'Every' && per.seconds === 0);
     const bound = some(t.spender) !== null || some(t.limit.to) !== null || receive !== null;
-    return t.version === 1 && window && limit && (!receive || receive.min > 0n) && bound;
+    return window && t.limit.max > 0n && (!receive || receive.min > 0n) && bound;
 }
 
 /**
@@ -193,9 +192,9 @@ export async function fetchMandateStatus(rpc: Client, mandate: Address) {
     const [profileData, from, clock] = await accounts(rpc, [profile, t.limit.from, CLOCK]);
     // Profile: tag, authority, mandates, stale at 41. Clock: unix_timestamp at 32
     const [stale, now] = [profileData ? view(profileData).getBigUint64(41, true) : 0n, view(clock!).getBigInt64(32, true)];
-    const { per, max } = t.limit;
-    const window = (at: bigint) => (per.__kind === 'Total' ? 0n : (at - t.notBefore) / BigInt(per.seconds));
-    const left = max - (window(now) === window(rolled) || per.__kind === 'Total' ? consumed : 0n);
+    const period = some(t.limit.period);
+    const window = (at: bigint) => (period === null ? 0n : (at - t.notBefore) / BigInt(period));
+    const left = t.limit.max - (window(now) === window(rolled) ? consumed : 0n);
     const held = from ? seat(from) : { allowance: 0n, balance: 0n, enabled: false };
     const notAfter = some(t.notAfter);
     const state: MandateState =
@@ -221,14 +220,15 @@ export async function fetchMandates(rpc: Client, by: { authority: Address } | { 
         }
         return found;
     }
-    // Mandate: a 59-byte header, then the terms: version, authority, spender: option tag at 92, key at 93
-    const filters = [{ memcmp: { bytes: by.spender as string as Base58EncodedBytes, encoding: 'base58' as const, offset: 93n } }];
+    // Mandate: tag 1, a 57-byte header, then the terms: authority, spender at 89
+    const filters = [
+        { memcmp: { bytes: getBase58Decoder().decode(Uint8Array.of(1)) as Base58EncodedBytes, encoding: 'base58' as const, offset: 0n } },
+        { memcmp: { bytes: by.spender as string as Base58EncodedBytes, encoding: 'base58' as const, offset: 89n } },
+    ];
     const all = await rpc.getProgramAccounts(SOLANA_PULL_PROGRAM_ADDRESS, { encoding: 'base64', filters }).send();
-    return all.flatMap(({ account, pubkey }) => {
+    return all.map(({ account, pubkey }) => {
         const data = new Uint8Array(getBase64Encoder().encode(account.data[0]));
-        // tag 1 is a mandate; a spender's key follows only a set option tag
-        if (data[0] !== 1 || data[92] !== 1) return [];
-        return [decodeMandate({ address: pubkey, data, executable: false, lamports: account.lamports, programAddress: SOLANA_PULL_PROGRAM_ADDRESS, space: BigInt(data.length) })];
+        return decodeMandate({ address: pubkey, data, executable: false, lamports: account.lamports, programAddress: SOLANA_PULL_PROGRAM_ADDRESS, space: BigInt(data.length) });
     });
 }
 

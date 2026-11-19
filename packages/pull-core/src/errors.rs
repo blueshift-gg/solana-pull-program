@@ -31,7 +31,7 @@ pub enum PullError {
     Expired,
     /// The signer is not the terms' spender
     InvalidSpender,
-    /// A mandate in force: `Close` takes only what can never be used again
+    /// A mandate that can still pull: only its authority closes it
     NotClosable,
     /// The account is not the one that paid the rent being refunded
     InvalidPayer,
@@ -63,12 +63,14 @@ pub enum PullError {
     Stale,
     /// The tokens would not go to the account the terms name
     InvalidDestination,
+    /// A pull must take something
+    ZeroAmount,
 }
 
 impl PullError {
     /// Every error in code order, so clients can name a code: `ALL[code]`.
     /// A new variant goes here too; the test below checks the order.
-    pub const ALL: [PullError; 27] = [
+    pub const ALL: [PullError; 28] = [
         PullError::NotSigner,
         PullError::NotMutable,
         PullError::InvalidAccountOwner,
@@ -96,6 +98,7 @@ impl PullError {
         PullError::InvalidProfile,
         PullError::Stale,
         PullError::InvalidDestination,
+        PullError::ZeroAmount,
     ];
 }
 

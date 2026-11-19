@@ -2,13 +2,13 @@
 
 use pull_core::constants::*;
 use pull_core::errors::PullError;
-use pull_core::terms::{Per, Receive};
+use pull_core::terms::Receive;
 use pull_tests::*;
 use solana_address::Address;
 use solana_signer::Signer;
 
 const DAY: i64 = 86_400;
-const MONTHLY: Per = Per::Every(30 * DAY as u32);
+const MONTHLY: Option<u32> = Some(30 * DAY as u32);
 
 /// Whether `result` failed with exactly this program error.
 fn refused(result: litesvm::types::TransactionResult, error: PullError) -> bool {
@@ -235,7 +235,7 @@ fn dca_runs_once_a_day_for_anyone_who_delivers() {
     let owner = user.address();
 
     // Out: at most 10 USDC every day, to anyone. In: at least 0.05 SOL each time
-    let limits = limit(&user_usdc, 10 * USDC, Per::Every(DAY as u32));
+    let limits = limit(&user_usdc, 10 * USDC, Some(DAY as u32));
     let receive = Receive {
         to: &user_sol,
         min: 50_000_000,
@@ -274,7 +274,7 @@ fn a_mandate_reaches_only_its_authoritys_accounts() {
     let victim_usdc = victim.usdc.to_bytes();
 
     // The engine is the victim's delegate too, but this mandate is the thief's
-    let limits = limit(&victim_usdc, 100 * USDC, Per::Total);
+    let limits = limit(&victim_usdc, 100 * USDC, None);
     let bytes = encode(&terms(&t, Some(&t), None, limits, None));
     let key = thief.address();
     f.send(&[create(&key, &key, 1, &bytes)], &[&thief.key])
@@ -317,7 +317,7 @@ fn terms_that_name_a_destination_pay_only_there() {
     f.send(&[ix], &[&relayer.key]).unwrap();
 
     // A mandate with no spender: anyone lands the payout, and it still goes to the payee
-    let mut limits = limit(&user_usdc, 50 * USDC, Per::Total);
+    let mut limits = limit(&user_usdc, 50 * USDC, None);
     limits.to = Some(&payee_usdc);
     let bytes = encode(&terms(&u, None, None, limits, None));
     f.send(&[create(&owner, &owner, 2, &bytes)], &[&user.key])
@@ -334,6 +334,18 @@ fn terms_that_name_a_destination_pay_only_there() {
 
     assert_eq!(f.balance(&payee.usdc), 51 * USDC);
     assert_eq!((f.balance(&relayer.usdc), f.balance(&thief.usdc)), (0, 0));
+
+    // Its limit in total is used up, so anyone closes it, and the rent goes to its payer
+    let payout = mandate_pda(&owner, 2);
+    f.send(&[close(&key, &payout, &owner, &owner)], &[&thief.key])
+        .unwrap();
+    assert!(f.svm.get_account(&payout).is_none_or(|a| a.lamports == 0));
+    // The monthly one has room left, so it is not anyone's to close
+    let ix = close(&key, &mandate_pda(&owner, 1), &owner, &owner);
+    assert!(refused(
+        f.send(&[ix], &[&thief.key]),
+        PullError::NotClosable
+    ));
 }
 
 /// Whoever is recorded as the payer signed for it. Otherwise a merchant
@@ -391,13 +403,7 @@ fn substituted_accounts_are_refused() {
     let take = (user.usdc, f.usdc, thief.usdc);
 
     // A mandate the thief creates for the victim's account, under its own profile
-    let stolen = terms(
-        &t,
-        Some(&t),
-        None,
-        limit(&victim_usdc, USDC, Per::Total),
-        None,
-    );
+    let stolen = terms(&t, Some(&t), None, limit(&victim_usdc, USDC, None), None);
     f.send(&[create(&key, &key, 1, &encode(&stolen))], &[&thief.key])
         .unwrap();
     let from_victim = (victim.usdc, f.usdc, thief.usdc);
@@ -437,7 +443,7 @@ fn substituted_accounts_are_refused() {
         to: &user_sol,
         min: SOL,
     };
-    let limits = limit(&user_usdc, 10 * USDC, Per::Total);
+    let limits = limit(&user_usdc, 20 * USDC, None);
     let order = encode(&terms(&u, None, None, limits, Some(receive)));
     f.send(&[create(&owner, &owner, 1, &order)], &[&user.key])
         .unwrap();
@@ -497,7 +503,7 @@ fn a_refused_pull_names_its_cause() {
     let (u, m) = (user.address().to_bytes(), merchant.address().to_bytes());
     let user_usdc = user.usdc.to_bytes();
 
-    let limits = limit(&user_usdc, 1_000 * USDC, Per::Total);
+    let limits = limit(&user_usdc, 1_000 * USDC, None);
     let bytes = encode(&terms(&u, Some(&m), None, limits, None));
     let create = create(&user.address(), &user.address(), 1, &bytes);
     f.send(&[create], &[&user.key]).unwrap();
@@ -508,6 +514,8 @@ fn a_refused_pull_names_its_cause() {
         let ix = pull(&m, &user.address(), 1, accounts, amount, None, TOKEN);
         f.send(&[ix], &[&merchant.key])
     };
+    // Nothing at all
+    assert!(refused(pull(&mut f, 0), PullError::ZeroAmount));
     // Never enabled
     assert!(refused(pull(&mut f, USDC), PullError::NotDelegate));
     // Enabled for 5 USDC: more is refused, and all of it uses the approval up
@@ -620,7 +628,7 @@ fn a_fee_token_never_shorts_the_authority() {
     assert_eq!(held(&f, &merchant_fee), 110 * USDC - USDC / 10);
 
     // Receiving the fee token: what arrives is short, so the pull is refused
-    let limits = limit(&user_usdc, 10 * USDC, Per::Total);
+    let limits = limit(&user_usdc, 10 * USDC, None);
     let receive = Receive {
         to: &user_fee_key,
         min: 10 * USDC,
@@ -665,11 +673,11 @@ fn random_pulls_never_pass_a_limit() {
     let (mut now, mut paid) = (NOW, 0u64);
     let (mut accepted_count, mut refused_count) = (0, 0);
 
-    for salt in 0..150 {
+    for n in 0..150 {
         // One limit: a lifetime total, or a window of random length
         let per = match random(2) {
-            0 => Per::Total,
-            _ => Per::Every(1 + random(1_000) as u32),
+            0 => None,
+            _ => Some(1 + random(1_000) as u32),
         };
         let limits = limit(&user_usdc, 1 + random(1_000), per);
         // Windows count from the start of the terms, which is not when they are created
@@ -677,7 +685,7 @@ fn random_pulls_never_pass_a_limit() {
         let mut terms = terms(&u, Some(&m), None, limits, None);
         terms.not_before = start;
         let bytes = encode(&terms);
-        let create = create(&user.address(), &user.address(), salt + 1, &bytes);
+        let create = create(&user.address(), &user.address(), n + 1, &bytes);
         f.send(&[create], &[&user.key]).unwrap();
 
         // The model walks the windows one by one instead of dividing: what is
@@ -688,27 +696,27 @@ fn random_pulls_never_pass_a_limit() {
             f.set_time(now);
             let amount = random(1_200);
 
-            if let Per::Every(seconds) = limits.per {
+            if let Some(seconds) = limits.period {
                 while now >= window_end {
                     window_end += seconds as i64;
                     spent = 0;
                 }
             }
-            let fits = spent + amount <= limits.max;
+            let fits = amount > 0 && spent + amount <= limits.max;
 
             let accounts = (user.usdc, f.usdc, merchant.usdc);
             let spender = merchant.address();
             let ix = pull(
                 &spender,
                 &user.address(),
-                salt + 1,
+                n + 1,
                 accounts,
                 amount,
                 None,
                 TOKEN,
             );
             let accepted = f.send(&[ix], &[&merchant.key]).is_ok();
-            assert_eq!(accepted, fits, "mandate {salt}: {limits:?} pull {amount}");
+            assert_eq!(accepted, fits, "mandate {n}: {limits:?} pull {amount}");
 
             if accepted {
                 paid += amount;

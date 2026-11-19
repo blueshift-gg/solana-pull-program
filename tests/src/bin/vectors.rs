@@ -5,7 +5,7 @@
 //! `bytes` is hex.
 
 use pull_core::constants::MAX_TIME;
-use pull_core::terms::{Limit, Per, Receive, Terms};
+use pull_core::terms::{Limit, Receive, Terms};
 
 struct Random(u64);
 
@@ -55,11 +55,11 @@ fn main() {
     for _ in 0..2_000 {
         let keys: [[u8; 32]; 7] = core::array::from_fn(|_| r.key());
         let not_before = r.time();
-        let per = match r.below(5) {
-            0 => Per::Total,
-            1 => Per::Every(r.below(3) as u32),
-            2 => Per::Every(r.next() as u32),
-            _ => Per::Every([60, 3_600, 86_400, 2_592_000, 90_061][r.below(5) as usize]),
+        let period = match r.below(5) {
+            0 => None,
+            1 => Some(r.below(3) as u32),
+            2 => Some(r.next() as u32),
+            _ => Some([60, 3_600, 86_400, 2_592_000, 90_061][r.below(5) as usize]),
         };
         let receive = (r.below(2) == 0).then(|| Receive {
             to: &keys[5],
@@ -74,15 +74,19 @@ fn main() {
             limit: Limit {
                 from: &keys[2],
                 max: r.amount(),
-                per,
+                period,
                 to: (r.below(2) == 0).then_some(&keys[4]),
             },
             receive,
         };
         let mut bytes = Vec::new();
         terms.write(&mut bytes);
-        let valid = terms.validate().is_ok();
-        assert_eq!(Terms::decode(&bytes).is_ok(), valid);
+        // The bytes are the truth: an absent value is zeroes, so a zero
+        // written as present reads back as absent
+        let valid = Terms::decode(&bytes).is_ok();
+        if terms.validate().is_ok() {
+            assert_eq!(Terms::decode(&bytes), Ok(terms));
+        }
         println!(r#"{{"bytes":"{}","valid":{valid}}}"#, hex(&bytes));
     }
 }

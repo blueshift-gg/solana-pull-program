@@ -41,6 +41,7 @@ export const SOLANA_PULL_ERROR__INSUFFICIENT_FUNDS = 0x17; // 23
 export const SOLANA_PULL_ERROR__INVALID_PROFILE = 0x18; // 24
 export const SOLANA_PULL_ERROR__STALE = 0x19; // 25
 export const SOLANA_PULL_ERROR__INVALID_DESTINATION = 0x1a; // 26
+export const SOLANA_PULL_ERROR__ZERO_AMOUNT = 0x1b; // 27
 
 export type SolanaPullError =
   | typeof SOLANA_PULL_ERROR__ALLOWANCE_EXCEEDED
@@ -69,7 +70,8 @@ export type SolanaPullError =
   | typeof SOLANA_PULL_ERROR__NOT_SIGNER
   | typeof SOLANA_PULL_ERROR__NOT_YET_VALID
   | typeof SOLANA_PULL_ERROR__OVERFLOW
-  | typeof SOLANA_PULL_ERROR__STALE;
+  | typeof SOLANA_PULL_ERROR__STALE
+  | typeof SOLANA_PULL_ERROR__ZERO_AMOUNT;
 
 let solanaPullErrorMessages: Record<SolanaPullError, string> | undefined;
 if (process.env["NODE_ENV"] !== "production") {
@@ -93,7 +95,7 @@ if (process.env["NODE_ENV"] !== "production") {
     [SOLANA_PULL_ERROR__INVALID_TERMS]: `The terms break a validity rule (\`Terms::validate\`)`,
     [SOLANA_PULL_ERROR__LIMIT_EXCEEDED]: `The pull exceeds the limit`,
     [SOLANA_PULL_ERROR__MALFORMED_TERMS]: `The terms bytes are not a canonical encoding`,
-    [SOLANA_PULL_ERROR__NOT_CLOSABLE]: `A mandate in force: \`Close\` takes only what can never be used again`,
+    [SOLANA_PULL_ERROR__NOT_CLOSABLE]: `A mandate that can still pull: only its authority closes it`,
     [SOLANA_PULL_ERROR__NOT_DELEGATE]: `The engine is not the delegate of the account pulled from: it was never enabled, another \`Approve\` replaced it, or its approval ran out`,
     [SOLANA_PULL_ERROR__NOT_MUTABLE]: `An account this program writes directly must be writable`,
     [SOLANA_PULL_ERROR__NOT_RECEIVED]: `The authority received less than the terms require`,
@@ -101,6 +103,7 @@ if (process.env["NODE_ENV"] !== "production") {
     [SOLANA_PULL_ERROR__NOT_YET_VALID]: `The terms' window has not opened`,
     [SOLANA_PULL_ERROR__OVERFLOW]: `An amount overflowed`,
     [SOLANA_PULL_ERROR__STALE]: `The authority invalidated this mandate`,
+    [SOLANA_PULL_ERROR__ZERO_AMOUNT]: `A pull must take something`,
   };
 }
 

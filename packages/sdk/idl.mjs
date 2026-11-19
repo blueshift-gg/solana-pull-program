@@ -25,26 +25,19 @@ const time = c.numberTypeNode('i64', 'le', { display: c.dateTimeNumberDisplayNod
 const span = c.numberTypeNode('u32', 'le', { display: c.durationNumberDisplayNode({}) });
 const hidden = c.structFieldDisplayNode({ skip: 'always' });
 const field = (name, type, docs) => c.structFieldTypeNode({ docs, name, type });
-const option = (type) => c.optionTypeNode(type);
+// Absent is all zeroes, which is never a valid present value: the encoding has a fixed size
+const option = (type) => c.zeroableOptionTypeNode(type);
 const link = (name) => c.definedTypeLinkNode(name);
 const bytes = (size) => c.fixedSizeTypeNode(c.bytesTypeNode(), size);
 
 const types = [
-    c.definedTypeNode({
-        docs: ['What the limit counts over.'],
-        name: 'per',
-        type: c.enumTypeNode([
-            c.enumEmptyVariantTypeNode('total'),
-            c.enumStructVariantTypeNode('every', c.structTypeNode([field('seconds', span, ['Fixed windows of this length, counted from `notBefore`. Nothing carries over.'])])),
-        ]),
-    }),
     c.definedTypeNode({
         docs: ['What may go out: at most `max` may leave `from`, a token account of the authority, in its mint.'],
         name: 'limit',
         type: c.structTypeNode([
             field('from', key),
             field('max', u64),
-            field('per', link('per')),
+            field('period', option(span), ['Fixed windows of this length, counted from `notBefore`, with nothing carried over. None counts over the life of the mandate.']),
             field('to', option(key), ['The only token account the tokens may go to. None leaves it to the spender.']),
         ]),
     }),
@@ -57,7 +50,6 @@ const types = [
         docs: ['What an authority permits under a mandate.'],
         name: 'terms',
         type: c.structTypeNode([
-            c.structFieldTypeNode({ defaultValue: c.numberValueNode(1), defaultValueStrategy: 'omitted', display: hidden, name: 'version', type: u8 }),
             field('authority', key),
             field('spender', option(key), ['Who may pull. None is anyone.']),
             field('notBefore', time),
@@ -77,7 +69,7 @@ const accounts = [
         field('consumed', u64),
         field('payer', key, ['Paid the rent; it goes back there.']),
         field('index', u64, ["Its number among the authority's mandates."]),
-        field('terms', c.sizePrefixTypeNode(link('terms'), c.numberTypeNode('u16'))),
+        field('terms', link('terms')),
     ]),
     account('profile', 3, ["An authority's profile: it numbers its mandates and holds what invalidates them."], [
         field('authority', key),

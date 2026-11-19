@@ -7,8 +7,6 @@
  */
 
 import {
-  addDecoderSizePrefix,
-  addEncoderSizePrefix,
   assertAccountExists,
   assertAccountsExist,
   combineCodec,
@@ -21,8 +19,6 @@ import {
   getI64Encoder,
   getStructDecoder,
   getStructEncoder,
-  getU16Decoder,
-  getU16Encoder,
   getU64Decoder,
   getU64Encoder,
   getU8Decoder,
@@ -30,12 +26,12 @@ import {
   transformEncoder,
   type Account,
   type Address,
-  type Codec,
-  type Decoder,
   type EncodedAccount,
-  type Encoder,
   type FetchAccountConfig,
   type FetchAccountsConfig,
+  type FixedSizeCodec,
+  type FixedSizeDecoder,
+  type FixedSizeEncoder,
   type MaybeAccount,
   type MaybeEncodedAccount,
   type ReadonlyUint8Array,
@@ -79,7 +75,7 @@ export type MandateArgs = {
 };
 
 /** Gets the encoder for {@link MandateArgs} account data. */
-export function getMandateEncoder(): Encoder<MandateArgs> {
+export function getMandateEncoder(): FixedSizeEncoder<MandateArgs> {
   return transformEncoder(
     getStructEncoder([
       ["tag", getU8Encoder()],
@@ -87,26 +83,26 @@ export function getMandateEncoder(): Encoder<MandateArgs> {
       ["consumed", getU64Encoder()],
       ["payer", getAddressEncoder()],
       ["index", getU64Encoder()],
-      ["terms", addEncoderSizePrefix(getTermsEncoder(), getU16Encoder())],
+      ["terms", getTermsEncoder()],
     ]),
     (value) => ({ ...value, tag: MANDATE_TAG }),
   );
 }
 
 /** Gets the decoder for {@link Mandate} account data. */
-export function getMandateDecoder(): Decoder<Mandate> {
+export function getMandateDecoder(): FixedSizeDecoder<Mandate> {
   return getStructDecoder([
     ["tag", getU8Decoder()],
     ["rolled", getI64Decoder()],
     ["consumed", getU64Decoder()],
     ["payer", getAddressDecoder()],
     ["index", getU64Decoder()],
-    ["terms", addDecoderSizePrefix(getTermsDecoder(), getU16Decoder())],
+    ["terms", getTermsDecoder()],
   ]);
 }
 
 /** Gets the codec for {@link Mandate} account data. */
-export function getMandateCodec(): Codec<MandateArgs, Mandate> {
+export function getMandateCodec(): FixedSizeCodec<MandateArgs, Mandate> {
   return combineCodec(getMandateEncoder(), getMandateDecoder());
 }
 

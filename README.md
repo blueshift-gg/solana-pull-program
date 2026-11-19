@@ -51,18 +51,23 @@ then, and there is nothing between the two transfers to trust. Another program c
 ## Terms
 
 ```text
-Terms   { authority, spender: key | anyone, not_before, not_after?, limit, receive? }
-Limit   { from, max, per: total | every(seconds), to? }
+Terms   { authority, spender?, not_before, not_after?, limit, receive? }
+Limit   { from, max, period?, to? }
 Receive { to, min }
 ```
+
+The encoding has a fixed size, 196 bytes, with every field at a fixed offset. An absent
+value is all zeroes, and zeroes are never a valid present value: the zero key is the
+system program, which is no token account and never signs, and a period, an expiry or
+a minimum of zero is invalid. No spender means anyone may pull.
 
 `limit` is what may go out: "at most `max` may leave `from`", a token account of the
 owner, in its mint. With `to` it also says where: the tokens may go only to that token
 account, so whoever holds the spender's key can deliver the money but not redirect it.
 Without `to` the spender chooses.
 
-The limit counts in total, or over fixed windows that start at `not_before`; what is
-unused in a window does not carry over.
+The limit counts over fixed windows of `period` seconds that start at `not_before`, and
+what is unused in a window does not carry over. With no period it counts in total.
 
 `receive` is what must come in: "each pull, at least `min` arrives in `to`", a token
 account of the owner, in its mint. It is a total, not a rate: a spender that takes less
@@ -101,11 +106,14 @@ mandates by their numbers, with no scan of the program's accounts.
 
 Whoever pays the rent is always a separate account from whoever signs, so a merchant can
 sponsor a subscriber. The owner ends a mandate at any time with `Close`. Anyone closes
-one that has expired or that the owner invalidated. Either way it is gone for good, and
-the rent goes straight back to its payer.
+one that can never pull again: it expired, the owner invalidated it, or its limit in
+total is used up. Either way it is gone for good, and the rent goes straight back to its
+payer.
 
-A one-off payment is a mandate whose limit counts in total. It stays on chain, used up,
-until someone closes it.
+A one-off payment is a mandate whose limit counts in total. Once it is used up, anyone
+can close it.
+
+A mandate is 253 bytes and costs about 0.0027 SOL of rent, returned when it closes.
 
 ## Instructions
 
@@ -114,13 +122,13 @@ until someone closes it.
 | 3 | `Open` | the owner | create its profile, once |
 | 0 | `Create` | the owner | put a mandate on chain, under the next number |
 | 1 | `Pull` | the spender | take tokens under a mandate, and deliver what the owner must receive |
-| 2 | `Close` | the owner, or anyone once it is expired or invalidated | end a mandate and return its rent |
+| 2 | `Close` | the owner, or anyone once it can never pull again | end a mandate and return its rent |
 | 4 | `Invalidate` | the owner | end every mandate so far |
 
 | Account | PDA | Holds | Closes |
 |---|---|---|---|
 | Profile | `profile`, owner | `mandates`, `stale` | never |
-| Mandate | `mandate`, owner, number | the terms, how much of the limit is used, who paid the rent | the owner at any time; anyone once it expired or was invalidated |
+| Mandate | `mandate`, owner, number | the terms, how much of the limit is used, who paid the rent | the owner at any time; anyone once it expired, was invalidated or is used up |
 
 A profile never closes: one opened again would count from zero and bring old mandates
 back. It costs about 0.0012 SOL, once.
@@ -136,8 +144,8 @@ Token-2022 mints work, transfer fees included: the owner never gives up more tha
 limit, and never receives less than the terms say. A mint with a transfer hook does not:
 the program passes the hook no accounts, so the transfer fails.
 
-A pull that cannot move the tokens says why: `NotDelegate`, `AllowanceExceeded` or
-`InsufficientFunds`. `fetchMandateStatus` answers the same before anyone tries: whether
+A pull must take something (`ZeroAmount`). One that cannot move the tokens says why:
+`NotDelegate`, `AllowanceExceeded` or `InsufficientFunds`. `fetchMandateStatus` answers the same before anyone tries: whether
 a mandate is active, and how much one pull can take now. `fetchMandates` lists the
 mandates an owner created or a spender may use.
 
@@ -152,16 +160,17 @@ LiteSVM, the instruction alone, one run each:
 |---|---|
 | `Open` | 5.1k |
 | `Create` | 5.5k |
-| `Pull` | 4.3k |
+| `Pull` | 4.2k |
 | `Pull` that also delivers to the owner | 5.5k |
 | `Close` | 2.0k |
 | `Invalidate` | 1.7k |
 
-Enabling, opening and creating the first mandate in one transaction measured 12.3k on a
+Enabling, opening and creating the first mandate in one transaction measured 12.2k on a
 mainnet fork.
 
-`Open` and `Create` pay a PDA bump search, which varies by a few thousand with the
-address. The program is 42 KB.
+`Open` and `Create` pay a PDA bump search, which varies with the address: `Create`
+measured from 5.5k to 13k. The search is what makes each address canonical, so a wallet
+that lists an owner's mandates by number finds every one. The program is 42 KB.
 
 ## Build
 

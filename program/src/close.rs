@@ -10,8 +10,8 @@ use pull_core::terms::Terms;
 /// # Close
 ///
 /// End a mandate and return its rent to whoever paid it. Its authority may
-/// at any time; anyone may once it has expired or the authority invalidated
-/// it, since it can never be used again.
+/// at any time; anyone may once it can never pull again: it expired, the
+/// authority invalidated it, or its limit in total is used up.
 ///
 /// > Close the mandate into its payer
 ///
@@ -89,7 +89,11 @@ impl<'a> Close<'a> {
         if terms.authority.ne(closer) {
             let now = Clock::get()?.unix_timestamp;
             let expired = terms.not_after.is_some_and(|t| now >= t);
-            if !expired && mandate.index() > profile(self.profile, terms.authority)?.stale() {
+            let used_up = terms.limit.period.is_none() && mandate.consumed() >= terms.limit.max;
+            if !expired
+                && !used_up
+                && mandate.index() > profile(self.profile, terms.authority)?.stale()
+            {
                 return Err(PullError::NotClosable.into());
             }
         }

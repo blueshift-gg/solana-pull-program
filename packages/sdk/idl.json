@@ -78,16 +78,8 @@
               "kind": "structFieldTypeNode",
               "name": "terms",
               "type": {
-                "kind": "sizePrefixTypeNode",
-                "type": {
-                  "kind": "definedTypeLinkNode",
-                  "name": "terms"
-                },
-                "prefix": {
-                  "kind": "numberTypeNode",
-                  "format": "u16",
-                  "endian": "le"
-                }
+                "kind": "definedTypeLinkNode",
+                "name": "terms"
               }
             }
           ]
@@ -853,51 +845,6 @@
     "definedTypes": [
       {
         "kind": "definedTypeNode",
-        "name": "per",
-        "docs": [
-          "What the limit counts over."
-        ],
-        "type": {
-          "kind": "enumTypeNode",
-          "variants": [
-            {
-              "kind": "enumEmptyVariantTypeNode",
-              "name": "total"
-            },
-            {
-              "kind": "enumStructVariantTypeNode",
-              "name": "every",
-              "struct": {
-                "kind": "structTypeNode",
-                "fields": [
-                  {
-                    "kind": "structFieldTypeNode",
-                    "name": "seconds",
-                    "docs": [
-                      "Fixed windows of this length, counted from `notBefore`. Nothing carries over."
-                    ],
-                    "type": {
-                      "kind": "numberTypeNode",
-                      "format": "u32",
-                      "endian": "le",
-                      "display": {
-                        "kind": "durationNumberDisplayNode"
-                      }
-                    }
-                  }
-                ]
-              }
-            }
-          ],
-          "size": {
-            "kind": "numberTypeNode",
-            "format": "u8",
-            "endian": "le"
-          }
-        }
-      },
-      {
-        "kind": "definedTypeNode",
         "name": "limit",
         "docs": [
           "What may go out: at most `max` may leave `from`, a token account of the authority, in its mint."
@@ -923,10 +870,20 @@
             },
             {
               "kind": "structFieldTypeNode",
-              "name": "per",
+              "name": "period",
+              "docs": [
+                "Fixed windows of this length, counted from `notBefore`, with nothing carried over. None counts over the life of the mandate."
+              ],
               "type": {
-                "kind": "definedTypeLinkNode",
-                "name": "per"
+                "kind": "zeroableOptionTypeNode",
+                "item": {
+                  "kind": "numberTypeNode",
+                  "format": "u32",
+                  "endian": "le",
+                  "display": {
+                    "kind": "durationNumberDisplayNode"
+                  }
+                }
               }
             },
             {
@@ -936,15 +893,9 @@
                 "The only token account the tokens may go to. None leaves it to the spender."
               ],
               "type": {
-                "kind": "optionTypeNode",
-                "fixed": false,
+                "kind": "zeroableOptionTypeNode",
                 "item": {
                   "kind": "publicKeyTypeNode"
-                },
-                "prefix": {
-                  "kind": "numberTypeNode",
-                  "format": "u8",
-                  "endian": "le"
                 }
               }
             }
@@ -990,24 +941,6 @@
           "fields": [
             {
               "kind": "structFieldTypeNode",
-              "name": "version",
-              "defaultValueStrategy": "omitted",
-              "type": {
-                "kind": "numberTypeNode",
-                "format": "u8",
-                "endian": "le"
-              },
-              "defaultValue": {
-                "kind": "numberValueNode",
-                "number": 1
-              },
-              "display": {
-                "kind": "structFieldDisplayNode",
-                "skip": "always"
-              }
-            },
-            {
-              "kind": "structFieldTypeNode",
               "name": "authority",
               "type": {
                 "kind": "publicKeyTypeNode"
@@ -1020,15 +953,9 @@
                 "Who may pull. None is anyone."
               ],
               "type": {
-                "kind": "optionTypeNode",
-                "fixed": false,
+                "kind": "zeroableOptionTypeNode",
                 "item": {
                   "kind": "publicKeyTypeNode"
-                },
-                "prefix": {
-                  "kind": "numberTypeNode",
-                  "format": "u8",
-                  "endian": "le"
                 }
               }
             },
@@ -1048,8 +975,7 @@
               "kind": "structFieldTypeNode",
               "name": "notAfter",
               "type": {
-                "kind": "optionTypeNode",
-                "fixed": false,
+                "kind": "zeroableOptionTypeNode",
                 "item": {
                   "kind": "numberTypeNode",
                   "format": "i64",
@@ -1057,11 +983,6 @@
                   "display": {
                     "kind": "dateTimeNumberDisplayNode"
                   }
-                },
-                "prefix": {
-                  "kind": "numberTypeNode",
-                  "format": "u8",
-                  "endian": "le"
                 }
               }
             },
@@ -1077,16 +998,10 @@
               "kind": "structFieldTypeNode",
               "name": "receive",
               "type": {
-                "kind": "optionTypeNode",
-                "fixed": false,
+                "kind": "zeroableOptionTypeNode",
                 "item": {
                   "kind": "definedTypeLinkNode",
                   "name": "receive"
-                },
-                "prefix": {
-                  "kind": "numberTypeNode",
-                  "format": "u8",
-                  "endian": "le"
                 }
               }
             }
@@ -1559,7 +1474,7 @@
         "kind": "errorNode",
         "name": "notClosable",
         "code": 13,
-        "message": "A mandate in force: `Close` takes only what can never be used again"
+        "message": "A mandate that can still pull: only its authority closes it"
       },
       {
         "kind": "errorNode",
@@ -1638,6 +1553,12 @@
         "name": "invalidDestination",
         "code": 26,
         "message": "The tokens would not go to the account the terms name"
+      },
+      {
+        "kind": "errorNode",
+        "name": "zeroAmount",
+        "code": 27,
+        "message": "A pull must take something"
       }
     ],
     "constants": [

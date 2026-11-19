@@ -6,7 +6,7 @@ import { fetchMandateStatus, fetchSeat, onboardInstructions, pullInstruction, SO
 export async function payout() {
     const [treasury, payee, relayer] = await Promise.all([wallet({ [USDC]: 100_000_000 }), wallet({ [USDC]: 0 }), wallet({ [USDC]: 0 })]);
     const [vault, destination, relayerUsdc] = await Promise.all([tokenAccount(treasury.address), tokenAccount(payee.address), tokenAccount(relayer.address)]);
-    const terms = { authority: treasury.address, limit: { from: vault, max: 50_000_000n, per: { __kind: 'Total' as const }, to: destination }, notAfter: null, notBefore: await now(), receive: null, spender: null };
+    const terms = { authority: treasury.address, limit: { from: vault, max: 50_000_000n, period: null, to: destination }, notAfter: null, notBefore: await now(), receive: null, spender: null };
     const { instructions, mandate } = await onboardInstructions(rpc, { authority: treasury, payer: treasury, terms });
     await send(treasury, instructions);
     const { mandate: account } = await fetchMandateStatus(rpc, mandate);

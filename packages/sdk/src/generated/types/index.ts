@@ -7,6 +7,5 @@
  */
 
 export * from "./limit.ts";
-export * from "./per.ts";
 export * from "./receive.ts";
 export * from "./terms.ts";

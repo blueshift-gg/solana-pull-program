@@ -3,7 +3,7 @@
 //! Every account starts with a tag naming its type, so one account can never
 //! be read as another. Callers validate owner, length and tag before taking views.
 
-use crate::{constants::*, terms::Per};
+use crate::constants::*;
 use pinocchio::pubkey::Pubkey;
 
 macro_rules! field {
@@ -59,7 +59,7 @@ impl Profile {
     field!(stale, set_stale, u64);
 }
 
-/// A mandate: this header, then the canonical terms.
+/// A mandate: this header, then its terms.
 #[repr(C)]
 pub struct Mandate {
     tag: [u8; 1],
@@ -70,7 +70,6 @@ pub struct Mandate {
     pub payer: Pubkey,
     /// Its number among the authority's mandates.
     index: [u8; 8],
-    terms_len: [u8; 2],
 }
 
 account!(Mandate);
@@ -80,20 +79,17 @@ impl Mandate {
     field!(rolled, set_rolled, i64);
     field!(consumed, set_consumed, u64);
     field!(index, set_index, u64);
-    field!(terms_len, set_terms_len, u16);
 
     /// What the limit has consumed at `now`. A periodic limit starts each
     /// window, counted from `start`, with nothing consumed.
-    pub fn spent(&self, per: Per, start: i64, now: i64) -> u64 {
-        match per {
-            Per::Total => self.consumed(),
-            Per::Every(seconds) => {
-                let window = |t: i64| (t - start).div_euclid(seconds as i64);
-                match window(now) == window(self.rolled()) {
-                    true => self.consumed(),
-                    false => 0,
-                }
-            }
+    pub fn spent(&self, period: Option<u32>, start: i64, now: i64) -> u64 {
+        let Some(seconds) = period else {
+            return self.consumed();
+        };
+        let window = |t: i64| (t - start).div_euclid(seconds as i64);
+        match window(now) == window(self.rolled()) {
+            true => self.consumed(),
+            false => 0,
         }
     }
 }

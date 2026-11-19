@@ -12,7 +12,7 @@ use pull_core::{constants::*, errors::PullError, terms::Terms};
 ///
 /// > Take the next number from the authority's profile
 /// > Create the Mandate PDA for that number
-/// > Copy the canonical terms after its header
+/// > Copy the terms after its header
 ///
 /// Accounts:
 ///
@@ -25,7 +25,7 @@ use pull_core::{constants::*, errors::PullError, terms::Terms};
 /// 7. program:         [executable]    this program, for the event CPI
 ///
 /// Parameters:
-/// 1. terms: [u8],     // canonical terms: the rest of the instruction data
+/// 1. terms: [u8; TERMS_LEN],
 ///
 /// Account Checks:
 /// - Authority: signer, and the terms' authority
@@ -34,7 +34,7 @@ use pull_core::{constants::*, errors::PullError, terms::Terms};
 /// - Payer, SystemProgram, Engine, Program: no need to check since the CPIs fail otherwise
 ///
 /// Instruction Checks:
-/// - Terms: canonical and valid
+/// - Terms: well-formed and valid
 ///
 /// Event Data:
 /// - discriminator: u8, (255u8, 0u8)
@@ -105,7 +105,7 @@ impl<'a> Create<'a> {
         let bump = check_pda(self.mandate, &seeds)?;
 
         // Create it and copy the terms after the header
-        let len = MANDATE_LEN + self.bytes.len();
+        let len = MANDATE_LEN + TERMS_LEN;
         create_pda(self.payer, self.mandate, len, &seeds, bump)?;
         // SAFETY: the account was just created with `len` bytes, and nothing else borrows it.
         let data = unsafe { self.mandate.borrow_mut_data_unchecked() };
@@ -115,7 +115,6 @@ impl<'a> Create<'a> {
         mandate.set_tag(MANDATE_TAG);
         mandate.payer = *self.payer.key();
         mandate.set_index(index);
-        mandate.set_terms_len(self.bytes.len() as u16);
 
         // Log the Create Event
         emit(

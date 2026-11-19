@@ -16,13 +16,10 @@ import {
   getOptionEncoder,
   getStructDecoder,
   getStructEncoder,
-  getU8Decoder,
-  getU8Encoder,
-  transformEncoder,
   type Address,
-  type Codec,
-  type Decoder,
-  type Encoder,
+  type FixedSizeCodec,
+  type FixedSizeDecoder,
+  type FixedSizeEncoder,
   type Option,
   type OptionOrNullable,
 } from "@solana/kit";
@@ -39,7 +36,6 @@ import {
 
 /** What an authority permits under a mandate. */
 export type Terms = {
-  version: number;
   authority: Address;
   /** Who may pull. None is anyone. */
   spender: Option<Address>;
@@ -59,33 +55,58 @@ export type TermsArgs = {
   receive: OptionOrNullable<ReceiveArgs>;
 };
 
-export function getTermsEncoder(): Encoder<TermsArgs> {
-  return transformEncoder(
-    getStructEncoder([
-      ["version", getU8Encoder()],
-      ["authority", getAddressEncoder()],
-      ["spender", getOptionEncoder(getAddressEncoder())],
-      ["notBefore", getI64Encoder()],
-      ["notAfter", getOptionEncoder(getI64Encoder())],
-      ["limit", getLimitEncoder()],
-      ["receive", getOptionEncoder(getReceiveEncoder())],
-    ]),
-    (value) => ({ ...value, version: 1 }),
-  );
-}
-
-export function getTermsDecoder(): Decoder<Terms> {
-  return getStructDecoder([
-    ["version", getU8Decoder()],
-    ["authority", getAddressDecoder()],
-    ["spender", getOptionDecoder(getAddressDecoder())],
-    ["notBefore", getI64Decoder()],
-    ["notAfter", getOptionDecoder(getI64Decoder())],
-    ["limit", getLimitDecoder()],
-    ["receive", getOptionDecoder(getReceiveDecoder())],
+export function getTermsEncoder(): FixedSizeEncoder<TermsArgs> {
+  return getStructEncoder([
+    ["authority", getAddressEncoder()],
+    [
+      "spender",
+      getOptionEncoder(getAddressEncoder(), {
+        prefix: null,
+        noneValue: "zeroes",
+      }),
+    ],
+    ["notBefore", getI64Encoder()],
+    [
+      "notAfter",
+      getOptionEncoder(getI64Encoder(), { prefix: null, noneValue: "zeroes" }),
+    ],
+    ["limit", getLimitEncoder()],
+    [
+      "receive",
+      getOptionEncoder(getReceiveEncoder(), {
+        prefix: null,
+        noneValue: "zeroes",
+      }),
+    ],
   ]);
 }
 
-export function getTermsCodec(): Codec<TermsArgs, Terms> {
+export function getTermsDecoder(): FixedSizeDecoder<Terms> {
+  return getStructDecoder([
+    ["authority", getAddressDecoder()],
+    [
+      "spender",
+      getOptionDecoder(getAddressDecoder(), {
+        prefix: null,
+        noneValue: "zeroes",
+      }),
+    ],
+    ["notBefore", getI64Decoder()],
+    [
+      "notAfter",
+      getOptionDecoder(getI64Decoder(), { prefix: null, noneValue: "zeroes" }),
+    ],
+    ["limit", getLimitDecoder()],
+    [
+      "receive",
+      getOptionDecoder(getReceiveDecoder(), {
+        prefix: null,
+        noneValue: "zeroes",
+      }),
+    ],
+  ]);
+}
+
+export function getTermsCodec(): FixedSizeCodec<TermsArgs, Terms> {
   return combineCodec(getTermsEncoder(), getTermsDecoder());
 }

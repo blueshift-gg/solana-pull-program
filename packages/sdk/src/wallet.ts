@@ -42,7 +42,7 @@ export function describeTerms(terms: Terms, tokens: Tokens = {}): Row[] {
     const [spender, to, receive, notAfter] = [some(terms.spender), some(limit.to), some(terms.receive), some(terms.notAfter)];
     const rows: Row[] = [
         ['Who can take it', spender ? short(spender) : 'Anyone'],
-        ['Can take', `Up to ${amount(limit.max, limit.from, tokens)}${limit.per.__kind === 'Every' ? ` every ${span(limit.per.seconds)}` : ' in total'}`],
+        ['Can take', `Up to ${amount(limit.max, limit.from, tokens)}${some(limit.period) !== null ? ` every ${span(some(limit.period)!)}` : ' in total'}`],
         ['From', short(limit.from)],
         ['Goes to', to ? `Only ${short(to)}` : 'Wherever the taker chooses'],
     ];

@@ -11,7 +11,7 @@ use litesvm_token::{
     get_spl_account, spl_token, Approve, CreateAssociatedTokenAccount, CreateMint, MintTo,
 };
 use pull_core::constants::*;
-use pull_core::terms::{Limit, Per, Receive, Terms};
+use pull_core::terms::{Limit, Receive, Terms};
 use solana_address::Address;
 use solana_clock::Clock;
 use solana_instruction::{AccountMeta, Instruction};
@@ -194,11 +194,11 @@ pub fn encode(terms: &Terms) -> Vec<u8> {
 }
 
 /// "At most `max` may leave `from`", to wherever the spender says.
-pub fn limit(from: &[u8; 32], max: u64, per: Per) -> Limit<'_> {
+pub fn limit(from: &[u8; 32], max: u64, period: Option<u32>) -> Limit<'_> {
     Limit {
         from,
         max,
-        per,
+        period,
         to: None,
     }
 }
