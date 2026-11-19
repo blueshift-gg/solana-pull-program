@@ -6,7 +6,7 @@
     "kind": "programNode",
     "name": "solanaPull",
     "publicKey": "PULLrgDYqK1yFKVTSbWieX3ARP7U2XUyrjxWXqKgVzA",
-    "version": "0.0.1",
+    "version": "0.1.0-rc.1",
     "accounts": [
       {
         "kind": "accountNode",

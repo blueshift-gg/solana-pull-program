@@ -154,7 +154,7 @@ const events = [
 
 // The SPL delegate of every enabled token account, and the signer of every event
 const constants = [c.constantNode('engineAddress', key, c.publicKeyValueNode(ENGINE))];
-const root = c.rootNode(c.programNode({ accounts, constants, definedTypes: types, errors, events, instructions, name: 'solanaPull', pdas, publicKey: PROGRAM, version: '0.0.1' }));
+const root = c.rootNode(c.programNode({ accounts, constants, definedTypes: types, errors, events, instructions, name: 'solanaPull', pdas, publicKey: PROGRAM, version: '0.1.0-rc.1' }));
 fs.writeFileSync(`${here}idl.json`, `${JSON.stringify(root, null, 2)}\n`);
 await createFromRoot(root).accept(renderVisitor(here.replace(/\/$/, ''), { erasableSyntax: true, importExtension: 'ts', kitImportStrategy: 'rootOnly', syncPackageJson: false }));
 console.log(`idl.json and src/generated: ${instructions.length} instructions, ${accounts.length} accounts, ${events.length} events, ${errors.length} errors`);

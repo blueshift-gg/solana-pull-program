@@ -1836,7 +1836,7 @@ dependencies = [
 
 [[package]]
 name = "pull-core"
-version = "0.0.1"
+version = "0.1.0-rc.1"
 dependencies = [
  "five8_const 1.0.0",
  "pinocchio",
@@ -1844,7 +1844,7 @@ dependencies = [
 
 [[package]]
 name = "pull-program"
-version = "0.0.1"
+version = "0.1.0-rc.1"
 dependencies = [
  "pinocchio",
  "pinocchio-system",

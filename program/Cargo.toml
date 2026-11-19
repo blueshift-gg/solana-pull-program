@@ -1,6 +1,6 @@
 [package]
 name = "pull-program"
-version = "0.0.1"
+version = "0.1.0-rc.1"
 edition = "2021"
 description = "Outcome-bound delegated authority for Solana"
 license = "MIT"
